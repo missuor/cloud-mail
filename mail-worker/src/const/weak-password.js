@@ -44,6 +44,43 @@ export const WEAK_STEMS = new Set([
 	'woaini', 'nihao', 'zhongguo', 'beijing', 'shanghai', 'xiaoming', 'wangyi',
 ]);
 
+// 中文弱口令。中文口令的英文词干恒为空串、会走 stem.length < 3 直接放行，
+// 等于整个中文形态拿不到任何字典检查——对一个中文为主的项目，这相当于
+// 弱口令表里没有 password。
+// 只做「完全相等」（含按短周期折叠后相等）判断，不做包含判断：
+// 「我的密码很安全啊」也含「密码」但本身不弱，包含判断会误伤它。
+// 代价是「我的密码是密码」这类短语挡不住——那需要真正的短语词典，超出本表范围。
+const CJK_WEAK_STEMS = new Set([
+	'密码', '我的密码', '密码密码', '新密码', '旧密码', '默认密码',
+	'管理员', '管理员密码', '用户', '登录', '邮箱', '邮件',
+	'我爱你', '你好', '中国', '北京', '上海', '广州', '深圳',
+	'生日快乐', '新年快乐', '恭喜发财', '天天开心', '平安喜乐',
+	'测试', '测试密码', '张三', '李四', '王五',
+]);
+
+// 中文数字序列：一二三四五六七八 这类
+const CJK_SEQUENCES = ['零一二三四五六七八九十', '一二三四五六七八九十'];
+
+// 只保留汉字。中文口令的词干就靠这个取
+export function toCjkStem(password) {
+	return normalizeForPolicy(password).replace(/[^\p{Script=Han}]/gu, '');
+}
+
+function isCjkWeak(password) {
+
+	const stem = toCjkStem(password);
+
+	if (stem.length < 2) {
+		return false;
+	}
+
+	if (CJK_WEAK_STEMS.has(stem) || CJK_WEAK_STEMS.has(collapseRepeat(stem))) {
+		return true;
+	}
+
+	return stem.length >= 4 && CJK_SEQUENCES.some(seq => seq.includes(stem));
+}
+
 // 键盘走位：按行/列的连续段。用子串判断，能一次盖住 qwert / asdfg / zxcvb
 // 这类任意长度的截取，不必逐条硬编码
 const KEYBOARD_ROWS = [
@@ -54,9 +91,17 @@ const KEYBOARD_ROWS = [
 // leet 还原：p@ssw0rd -> password
 const LEET = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's', '!': 'i' };
 
+// 长度与词干两侧必须共用同一份归一化输入，否则会出现「词干那边认得、
+// 长度那边算错」的不一致。
+// - NFKC：全角 ｐａｓｓｗｏｒｄ 折成半角，且统一 NFC/NFD（café 的两种写法
+//   码点数不同，不统一的话同一个口令时而过时而不过）
+// - 去掉 \p{Cf} 格式字符：零宽空格不可见、零熵，却会被按 2 计来凑长度
+export function normalizeForPolicy(password) {
+	return String(password ?? '').normalize('NFKC').replace(/\p{Cf}/gu, '');
+}
+
 function normalize(password) {
-	// NFKC 把全角 ｐａｓｓｗｏｒｄ 折成半角，否则换个输入法状态就绕过了
-	return String(password).normalize('NFKC').toLowerCase();
+	return normalizeForPolicy(password).toLowerCase();
 }
 
 // 词干：先剥掉首尾的数字与符号，再还原 leet，最后只留字母。
@@ -124,9 +169,11 @@ function longestSequentialRun(s) {
 // 结构性弱口令：整串同一个字符、短纯数字、连续序列
 export function isStructurallyWeak(password) {
 
-	const s = String(password);
+	const s = normalizeForPolicy(password);
 
-	if (/^(.)\1+$/.test(s)) {
+	// u 标志不能少：不带 u 时 . 匹配单个 UTF-16 码元，代理对（emoji、生僻字
+	// 扩展区）永远匹配不上「整串同一字符」，这条规则会对它们静默失效
+	if (/^(.)\1+$/u.test(s)) {
 		return true;
 	}
 
@@ -157,6 +204,10 @@ export function isStructurallyWeak(password) {
 export function isWeakPassword(password) {
 
 	if (isStructurallyWeak(password)) {
+		return true;
+	}
+
+	if (isCjkWeak(password)) {
 		return true;
 	}
 
