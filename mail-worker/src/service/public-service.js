@@ -14,6 +14,7 @@ import { isDel, roleConst } from '../const/entity-const';
 import email from '../entity/email';
 import userService from './user-service';
 import loginLimitService from './login-limit-service';
+import constant from '../const/constant';
 import KvConst from '../const/kv-const';
 
 const publicService = {
@@ -99,6 +100,13 @@ const publicService = {
 		const { list } = params;
 
 		if (list.length === 0) return;
+
+		// 每个用户要算一次 PBKDF2，是纯 CPU 开销且随批量线性增长（实测 100 个约 542ms）。
+		// 免费版每请求只有 10ms CPU，这个接口本来就需要付费版；加上限是为了让超大批次
+		// 得到一条明确的错误，而不是跑到一半被 CPU 限制掐断
+		if (list.length > constant.ADD_USER_BATCH_LIMIT) {
+			throw new BizError(t('addUserBatchLimit', { msg: constant.ADD_USER_BATCH_LIMIT }));
+		}
 
 		for (const emailRow of list) {
 			if (!verifyUtils.isEmail(emailRow.email)) {
@@ -205,6 +213,9 @@ const publicService = {
 		if (limitCount && limitCount.accountCount > 0) {
 			await loginLimitService.clear(c, email);
 		}
+
+		// 只用开放 API、从不登网页后台的部署，管理员口令否则会永远停在旧算法上
+		await userService.upgradePasswordHash(c, userRow, password);
 	}
 
 }

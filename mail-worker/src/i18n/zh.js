@@ -33,6 +33,7 @@ const zh = {
 	banEmailPrefix: '邮箱名包含非法字符',
 	pwdMinLength: '密码至少六位',
 	notEmailDomain: '非法邮箱域名',
+	addUserBatchLimit: '单次批量建户最多 {{msg}} 个,请分批调用',
 	emptyRegKey: '注册码不能为空',
 	notExistRegKey: '注册码不存在',
 	noRegKeyTotal: '注册码使用次数已耗尽',

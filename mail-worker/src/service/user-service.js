@@ -69,6 +69,27 @@ const userService = {
 		await orm(c).update(user).set({ password: hash, salt: salt }).where(eq(user.userId, userId)).run();
 	},
 
+	// 渐进升级口令哈希。存量口令是单轮 SHA-256，拖库即等于明文；没有明文就无法离线
+	// 重算，只能在校验通过、明文恰好在手的这一刻换掉。
+	// 凡是校验口令的入口都要调，不只是网页登录——只用开放 API 的部署如果不在
+	// genToken 上也做，最高价值的管理员口令会永远停在旧算法上。
+	// 失败不能影响调用方：升级不了顶多这次没换成，下次再来
+	async upgradePasswordHash(c, userRow, password) {
+
+		const iterations = cryptoUtils.iterations(c);
+
+		if (!cryptoUtils.needsRehash(userRow.password, iterations)) {
+			return;
+		}
+
+		try {
+			const upgraded = await cryptoUtils.hashPassword(password, iterations);
+			await this.updatePassword(c, userRow.userId, upgraded.hash, upgraded.salt);
+		} catch (e) {
+			console.error('口令哈希升级失败', e);
+		}
+	},
+
 	selectByEmail(c, email) {
 		return orm(c).select().from(user).where(
 			and(

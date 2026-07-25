@@ -231,7 +231,9 @@ const loginService = {
 			throw new BizError(t('isBanUser'));
 		}
 
-		if (!await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password) && !noVerifyPwd) {
+		// noVerifyPwd 判断必须在左边：JS 从左往右求值，写在右边的话 oauth 免密登录
+		// 每次都会白跑一次 PBKDF2（约 5ms）去比对一个必然被丢弃的结果
+		if (!noVerifyPwd && !await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password)) {
 			await loginLimitService.recordFail(c, email);
 			throw new BizError(t('IncorrectPwd'));
 		}
@@ -241,20 +243,8 @@ const loginService = {
 			await loginLimitService.clear(c, email);
 		}
 
-		// 渐进升级口令哈希。存量口令是单轮 SHA-256，拖库即等于明文；没有明文就无法
-		// 离线重算，只能在用户登录、明文恰好在手的这一刻换掉。调高迭代次数后同理。
-		// 失败不能影响登录本身——升级不了顶多是这次没换成，下次登录再试
 		if (!noVerifyPwd) {
-			const iterations = cryptoUtils.iterations(c);
-
-			if (cryptoUtils.needsRehash(userRow.password, iterations)) {
-				try {
-					const upgraded = await cryptoUtils.hashPassword(password, iterations);
-					await userService.updatePassword(c, userRow.userId, upgraded.hash, upgraded.salt);
-				} catch (e) {
-					console.error('口令哈希升级失败', e);
-				}
-			}
+			await userService.upgradePasswordHash(c, userRow, password);
 		}
 
 		const uuid = uuidv4();

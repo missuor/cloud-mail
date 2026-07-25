@@ -33,6 +33,7 @@ const en = {
 	banEmailPrefix: 'Invalid characters in email address',
 	pwdMinLength: 'Password must be at least 6 characters',
 	notEmailDomain: 'Invalid email domain',
+	addUserBatchLimit: 'At most {{msg}} users per batch, please split the request',
 	emptyRegKey: 'Invite code cannot be empty',
 	notExistRegKey: 'Invite code does not exist',
 	noRegKeyTotal: 'Invite code usage limit reached',

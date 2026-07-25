@@ -21,11 +21,14 @@ const saltHashUtils = {
 	iterations(c) {
 		const configured = Number(c?.env?.pwd_iterations);
 
-		if (!Number.isFinite(configured) || configured < 1000) {
+		if (!Number.isFinite(configured) || configured < constant.PWD_ITERATIONS_MIN) {
 			return constant.PWD_ITERATIONS;
 		}
 
-		return Math.floor(configured);
+		// 必须夹上限。误配成 1e9 这种值不会报错，只会闷头算约 110 秒 CPU，
+		// 连付费版默认的 30s 上限都超；而 CPU 超限是运行时终止、JS 里 catch 不到，
+		// 结果就是配置改错一次、全站再也登不进去
+		return Math.min(Math.floor(configured), constant.PWD_ITERATIONS_MAX);
 	},
 
 	async hashPassword(password, iterations = constant.PWD_ITERATIONS) {
