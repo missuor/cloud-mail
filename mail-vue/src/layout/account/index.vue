@@ -2,10 +2,9 @@
   <div class="account-box">
     <div class="head-opt">
       <Icon v-perm="'account:add'" class="icon add" icon="ion:add-outline" width="23" height="23" @click="add"/>
-      <!-- 用 v-if 而不是 v-perm：后者的实现是 el.parentNode.removeChild(el)，
-           直接绕过 Vue 摘 DOM，会给 el-tooltip 留下一个没有触发元素的壳子 -->
-      <el-tooltip v-if="hasPerm('account:delete')" :content="$t('manageAccount')" placement="bottom">
-        <Icon class="icon manage" icon="fluent:list-bar-16-filled" width="19" height="19" @click="openManage"/>
+      <el-tooltip :content="$t('manageAccount')" placement="bottom">
+        <Icon v-perm="'account:delete'" class="icon manage" icon="fluent:list-bar-16-filled" width="19" height="19"
+              @click="openManage"/>
       </el-tooltip>
       <Icon class="icon refresh" icon="ion:reload" width="18" height="18" @click="refresh"/>
     </div>
