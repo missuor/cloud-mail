@@ -246,6 +246,7 @@ import {useI18n} from "vue-i18n";
 import {EmailUnreadEnum} from "@/enums/email-enum.js";
 import { UseVirtualList } from '@vueuse/components'
 import { useScroll } from '@vueuse/core'
+import DOMPurify from 'dompurify'
 
 const props = defineProps({
   getEmailList: Function,
@@ -556,9 +557,10 @@ function htmlToText(email) {
 
     const tempDiv = document.createElement('div');
 
-    tempDiv.innerHTML = email.content.replace(
-        /<(img|iframe|object|embed|video|audio|source|link)[^>]*>/gi, ''
-    );
+    // 先消毒再入 DOM：正则剥标签容易被畸形属性绕过，这里只取纯文本，直接交给 DOMPurify
+    tempDiv.innerHTML = DOMPurify.sanitize(email.content, {
+      FORBID_TAGS: ['img', 'iframe', 'object', 'embed', 'video', 'audio', 'source', 'link', 'svg'],
+    });
 
     const scriptsAndStyles = tempDiv.querySelectorAll('script, style, title');
     scriptsAndStyles.forEach(el => el.remove());

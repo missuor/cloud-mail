@@ -6,6 +6,7 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
+import DOMPurify from 'dompurify'
 
 const props = defineProps({
   html: {
@@ -28,7 +29,14 @@ function updateContent() {
   const bodyStyle = bodyStyleMatch ? bodyStyleMatch[1].replace(/[<>]/g, '') : '';
 
   // 2. 移除 <body> 标签（保留内容）
-  const cleanedHtml = props.html.replace(/<\/?body[^>]*>/gi, '');
+  const strippedHtml = props.html.replace(/<\/?body[^>]*>/gi, '');
+
+  // 2.1 消毒：邮件正文是完全不可信的外部输入，Shadow DOM 只隔离样式不隔离脚本，
+  //     不清洗的话一个 <img onerror> 就能在本站源上读走 localStorage 里的 token
+  const cleanedHtml = DOMPurify.sanitize(strippedHtml, {
+    ADD_ATTR: ['target'],
+    FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
+  });
 
   // 3. 将 body 的 style 应用到 .shadow-content
   shadowRoot.innerHTML = `

@@ -4,10 +4,24 @@ import domainUtils from '../utils/domain-uitls';
 export default function emailHtmlTemplate(html, domain) {
 
 	const { document } = parseHTML(html);
-	document.querySelectorAll('script').forEach(script => script.remove());
-	html = document.toString();
+	sanitize(document);
+
+	// body 的拆解放在服务端用解析器做。客户端原来用 /<\/?body[^>]*>/ 正则剥标签，
+	// 属性值里出现 > 就会把标签从中间截断，反而把被引号包住的 payload 还原成真标签。
+	const bodyEl = document.querySelector('body');
+	let bodyStyle = '';
+
+	if (bodyEl) {
+		bodyStyle = (bodyEl.getAttribute('style') || '').replace(/[<>"]/g, '');
+		const headStyle = Array.from(document.querySelectorAll('head style')).map(el => el.outerHTML).join('');
+		html = headStyle + bodyEl.innerHTML;
+	} else {
+		html = document.toString();
+	}
+
 	html = html.replace(/{{domain}}/g, domainUtils.toOssDomain(domain) + '/');
 	const safeHtmlJson = JSON.stringify(html).replace(/</g, '\\u003C');
+	const safeBodyStyleJson = JSON.stringify(bodyStyle).replace(/</g, '\\u003C');
 
 	return `<!DOCTYPE html>
 <html lang='en' >
@@ -43,17 +57,12 @@ export default function emailHtmlTemplate(html, domain) {
 
     <script>
 
-        function renderHTML(html) {
+        function renderHTML(html, bodyStyle) {
             const container = document.getElementById('container');
             const shadowRoot = container.attachShadow({ mode: 'open' });
 
-            // 提取 <body> 的 style 属性
-            const bodyStyleRegex = /<body[^>]*style="([^"]*)"[^>]*>/i;
-            const bodyStyleMatch = html.match(bodyStyleRegex);
-            const bodyStyle = bodyStyleMatch ? bodyStyleMatch[1].replace(/[<>]/g, '') : '';
-
-            // 移除 <body> 标签
-            const cleanedHtml = html.replace(/<\\/?body[^>]*>/gi, '');
+            // body 的剥离与 style 提取已在服务端用解析器完成，这里不再做正则切标签
+            const cleanedHtml = html;
 
             // 渲染内容
             shadowRoot.innerHTML = \`
@@ -129,10 +138,43 @@ export default function emailHtmlTemplate(html, domain) {
 
         // 使用示例
         const exampleHtml = ${safeHtmlJson};
+        const exampleBodyStyle = ${safeBodyStyleJson};
 
         // 渲染HTML
-        renderHTML(exampleHtml);
+        renderHTML(exampleHtml, exampleBodyStyle);
     </script>
 </body>
 </html>`
+}
+
+// 邮件正文是完全不可信的外部输入，这个页面由 Worker 直接吐在自己的域名下，
+// 不清洗就是本站源上的存储型 XSS。只删 <script> 不够：innerHTML 本来就不执行
+// script，真正的载体是 on* 事件属性和 javascript: 伪协议。
+const DANGER_TAGS = 'script,iframe,object,embed,form,base,meta,link';
+const URL_ATTRS = ['href', 'src', 'action', 'formaction', 'xlink:href'];
+
+function sanitize(document) {
+
+	document.querySelectorAll(DANGER_TAGS).forEach(el => el.remove());
+
+	document.querySelectorAll('*').forEach(el => {
+
+		for (const name of el.getAttributeNames()) {
+
+			if (name.toLowerCase().startsWith('on')) {
+				el.removeAttribute(name);
+				continue;
+			}
+
+			if (!URL_ATTRS.includes(name.toLowerCase())) {
+				continue;
+			}
+
+			const value = (el.getAttribute(name) || '').replace(/[^!-~]/g, '').toLowerCase();
+
+			if (value.startsWith('javascript:') || value.startsWith('data:text/html') || value.startsWith('vbscript:')) {
+				el.removeAttribute(name);
+			}
+		}
+	});
 }
