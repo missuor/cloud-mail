@@ -11,6 +11,8 @@ const en = {
 	accountLimit: 'Email address limit reached',
 	delMyAccount: 'Cannot delete your own email',
 	noUserAccount: 'This email does not belong to the current user',
+	emptyAccountIds: 'Please select the emails to delete',
+	accountBatchLimit: 'At most {{msg}} emails per batch, please split the operation',
 	usernameLengthLimit: 'Username length exceeds the limit',
 	noOsSendPic: 'Cannot send body images: object storage not configured',
 	noOsDomainSendAtt: 'Cannot send attachments: object storage domain not configured',

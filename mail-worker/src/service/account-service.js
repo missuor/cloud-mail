@@ -12,6 +12,7 @@ import turnstileService from './turnstile-service';
 import roleService from './role-service';
 import { t } from '../i18n/i18n';
 import verifyRecordService from './verify-record-service';
+import constant from '../const/constant';
 
 const accountService = {
 
@@ -105,7 +106,7 @@ const accountService = {
 
 	list(c, params, userId) {
 
-		let { accountId, size, lastSort } = params;
+		let { accountId, size, lastSort, email } = params;
 
 		accountId = Number(accountId);
 		size = Number(size);
@@ -123,18 +124,25 @@ const accountService = {
 			lastSort = 9999999999;
 		}
 
-		return orm(c).select().from(account).where(
-			and(
-				eq(account.userId, userId),
-				eq(account.isDel, isDel.NORMAL),
-					or(
-						lt(account.sort, lastSort),
-						and(
-							eq(account.sort, lastSort),
-							gt(account.accountId, accountId)
-						)
-					))
+		const conditions = [
+			eq(account.userId, userId),
+			eq(account.isDel, isDel.NORMAL),
+			or(
+				lt(account.sort, lastSort),
+				and(
+					eq(account.sort, lastSort),
+					gt(account.accountId, accountId)
 				)
+			)
+		];
+
+		// 关键字搜索。邮箱多的时候要靠它把目标筛出来再批量处理，
+		// 与库里其它按邮箱查的地方一致用 COLLATE NOCASE
+		if (email) {
+			conditions.push(sql`${account.email} COLLATE NOCASE LIKE ${'%' + email + '%'}`);
+		}
+
+		return orm(c).select().from(account).where(and(...conditions))
 			.orderBy(desc(account.sort), asc(account.accountId))
 			.limit(size)
 			.all();
@@ -159,6 +167,54 @@ const accountService = {
 			and(eq(account.userId, userId),
 				eq(account.accountId, accountId)))
 			.run();
+	},
+
+	// 批量删除。校验全部先做完再写库，保证全有或全无——删到一半再报错，
+	// 用户既不知道删掉了哪些，也没法安全重试
+	async batchDelete(c, params, userId) {
+
+		const accountIds = String(params.accountIds || '')
+			.split(',')
+			.map(id => Number(id))
+			.filter(id => Number.isInteger(id) && id > 0);
+
+		if (accountIds.length === 0) {
+			throw new BizError(t('emptyAccountIds'));
+		}
+
+		// 去重后再判上限，否则重复 id 会白占额度
+		const uniqueIds = [...new Set(accountIds)];
+
+		if (uniqueIds.length > constant.ACCOUNT_BATCH_DELETE_LIMIT) {
+			throw new BizError(t('accountBatchLimit', { msg: constant.ACCOUNT_BATCH_DELETE_LIMIT }));
+		}
+
+		const user = await userService.selectById(c, userId);
+
+		const rows = await orm(c).select().from(account).where(
+			and(
+				eq(account.userId, userId),
+				eq(account.isDel, isDel.NORMAL),
+				inArray(account.accountId, uniqueIds)))
+			.all();
+
+		// 查不全说明夹带了别人的邮箱或已删除的 id，整批拒绝而不是静默跳过——
+		// 静默跳过会让前端显示「已删除 N 个」而实际删了更少
+		if (rows.length !== uniqueIds.length) {
+			throw new BizError(t('noUserAccount'));
+		}
+
+		if (rows.some(row => row.email === user.email)) {
+			throw new BizError(t('delMyAccount'));
+		}
+
+		await orm(c).update(account).set({ isDel: isDel.DELETE }).where(
+			and(
+				eq(account.userId, userId),
+				inArray(account.accountId, uniqueIds)))
+			.run();
+
+		return uniqueIds.length;
 	},
 
 	selectById(c, accountId) {

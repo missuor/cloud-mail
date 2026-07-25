@@ -11,6 +11,8 @@ const zh = {
 	accountLimit: '添加邮箱数量到达限制',
 	delMyAccount: '不可以删除自己的邮箱',
 	noUserAccount: '该邮箱不属于当前用户',
+	emptyAccountIds: '请先选择要删除的邮箱',
+	accountBatchLimit: '单次最多删除 {{msg}} 个邮箱,请分批操作',
 	usernameLengthLimit: '用户名长度超出限制',
 	noOsSendPic: '对象存储未配置不能发送正文图片',
 	noOsDomainSendAtt: '对象存储域名未配置不能发送附件',

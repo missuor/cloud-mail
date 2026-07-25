@@ -33,6 +33,9 @@ const constant = {
 	// 50000 迭代下实测每个约 5ms，100 个约 542ms。付费版 30s 上限下绰绰有余，
 	// 但免费版每请求只有 10ms，实际上只够 1 个——这个接口需要付费版
 	ADD_USER_BATCH_LIMIT: 100,
+	// 单次批量删除邮箱的上限。id 走 query 传递，太多会顶到 URL 长度限制；
+	// 前端超过就分批发
+	ACCOUNT_BATCH_DELETE_LIMIT: 100,
 	ADMIN_ROLE: {
 		name: 'admin',
 		sendCount: 0,

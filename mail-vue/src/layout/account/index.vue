@@ -2,6 +2,8 @@
   <div class="account-box">
     <div class="head-opt">
       <Icon v-perm="'account:add'" class="icon add" icon="ion:add-outline" width="23" height="23" @click="add"/>
+      <Icon v-perm="'account:delete'" class="icon manage" icon="fluent:list-bar-16-filled" width="19" height="19"
+            :title="$t('manageAccount')" @click="openManage"/>
       <Icon class="icon refresh" icon="ion:reload" width="18" height="18" @click="refresh"/>
     </div>
     <el-scrollbar class="scrollbar" ref="scrollbarRef">
@@ -114,6 +116,47 @@
         <span style="font-size: 12px;color: #F56C6C" v-if="botJsError">{{ $t('verifyModuleFailed') }}</span>
       </div>
     </el-dialog>
+    <el-dialog v-model="manageShow" class="manage-dialog" :title="$t('manageAccount')" @closed="onManageClosed">
+      <div class="manage-box">
+        <el-input v-model="manageKeyword" class="manage-search" clearable
+                  :placeholder="$t('searchAccountPlaceholder')" @input="onKeywordInput">
+          <template #prefix>
+            <Icon icon="fluent:search-16-regular" width="16" height="16"/>
+          </template>
+        </el-input>
+
+        <el-scrollbar class="manage-list" ref="manageScrollRef">
+          <div v-infinite-scroll="getManageList" :infinite-scroll-distance="200"
+               :infinite-scroll-immediate="false">
+            <div v-for="item in manageAccounts" :key="item.accountId" class="manage-item"
+                 :class="{ disabled: isSelf(item) }" @click="toggleOne(item)">
+              <el-checkbox :model-value="selectedIds.has(item.accountId)" :disabled="isSelf(item)"
+                           @click.stop @change="toggleOne(item)"/>
+              <span class="manage-email">{{ item.email }}</span>
+              <!-- 本人主邮箱不允许删除，标出来免得用户以为是 bug -->
+              <span v-if="isSelf(item)" class="manage-tag">{{ $t('currentAccountTag') }}</span>
+            </div>
+
+            <div v-if="manageLoading" class="manage-tip">{{ $t('accountLoading') }}</div>
+            <div v-else-if="manageAccounts.length === 0" class="manage-tip">{{ $t('noMessagesFound') }}</div>
+            <div v-else-if="manageNoMore" class="manage-tip">{{ $t('noMoreData') }}</div>
+          </div>
+        </el-scrollbar>
+
+        <div class="manage-footer">
+          <el-checkbox :model-value="pageAllChecked" :indeterminate="pageIndeterminate"
+                       :disabled="selectablePage.length === 0" @change="togglePage">
+            {{ $t('selectCurrentPage') }}
+          </el-checkbox>
+          <div class="manage-actions">
+            <span class="manage-count">{{ $t('selectedCount', { msg: selectedIds.size }) }}</span>
+            <el-button type="danger" :disabled="selectedIds.size === 0" :loading="batchDeleting"
+                       @click="batchRemove">{{ $t('deleteSelected') }}
+            </el-button>
+          </div>
+        </div>
+      </div>
+    </el-dialog>
     <el-dialog v-model="setNameShow" :title="$t('changeUserName')">
       <div class="container">
         <el-input v-model="accountName" type="text" :placeholder="$t('username')" autocomplete="off">
@@ -132,6 +175,7 @@ import {
   accountList,
   accountAdd,
   accountDelete,
+  accountBatchDelete,
   accountSetName,
   accountSetAllReceive,
   accountSetAsTop
@@ -338,6 +382,129 @@ function refresh() {
   getAccountList()
 }
 
+// ===== 批量管理弹窗 =====
+// 独立于侧栏那份列表：自己的游标、自己的搜索关键字，避免两边互相打架
+const manageShow = ref(false)
+const manageKeyword = ref('')
+const manageAccounts = reactive([])
+const manageLoading = ref(false)
+const manageNoMore = ref(false)
+const batchDeleting = ref(false)
+const manageScrollRef = ref(null)
+const selectedIds = ref(new Set())
+let keywordTimer = null
+
+// 本人主邮箱删不掉（后端也会拒），这里直接禁选
+function isSelf(item) {
+  return item.accountId === userStore.user.account.accountId
+}
+
+const selectablePage = computed(() => manageAccounts.filter(item => !isSelf(item)))
+
+const pageAllChecked = computed(() =>
+    selectablePage.value.length > 0 && selectablePage.value.every(item => selectedIds.value.has(item.accountId)))
+
+const pageIndeterminate = computed(() =>
+    !pageAllChecked.value && selectablePage.value.some(item => selectedIds.value.has(item.accountId)))
+
+function openManage() {
+  manageShow.value = true
+  manageKeyword.value = ''
+  resetManageList()
+}
+
+function onManageClosed() {
+  // 关掉就清干净，免得下次打开还留着上次的勾选
+  manageAccounts.splice(0, manageAccounts.length)
+  selectedIds.value = new Set()
+  manageKeyword.value = ''
+  manageNoMore.value = false
+}
+
+function resetManageList() {
+  manageAccounts.splice(0, manageAccounts.length)
+  selectedIds.value = new Set()
+  manageNoMore.value = false
+  manageLoading.value = false
+  nextTick(() => {
+    manageScrollRef.value?.setScrollTop(0)
+    getManageList()
+  })
+}
+
+function onKeywordInput() {
+  // 防抖：搜索框每敲一个字都发请求会打爆列表接口
+  clearTimeout(keywordTimer)
+  keywordTimer = setTimeout(resetManageList, 300)
+}
+
+function getManageList() {
+
+  if (manageLoading.value || manageNoMore.value) return
+
+  manageLoading.value = true
+
+  const accountId = manageAccounts.length > 0 ? manageAccounts.at(-1).accountId : 0
+  const lastSort = manageAccounts.length > 0 ? manageAccounts.at(-1).sort : null
+  const keyword = manageKeyword.value
+
+  accountList(accountId, 30, lastSort, keyword).then(list => {
+    // 请求回来时关键字可能已经变了，丢弃过期结果，否则会把上一次的结果混进来
+    if (keyword !== manageKeyword.value) return
+    if (list.length < 30) manageNoMore.value = true
+    manageAccounts.push(...list)
+  }).finally(() => {
+    manageLoading.value = false
+  })
+}
+
+function toggleOne(item) {
+  if (isSelf(item)) return
+  const next = new Set(selectedIds.value)
+  next.has(item.accountId) ? next.delete(item.accountId) : next.add(item.accountId)
+  selectedIds.value = next
+}
+
+function togglePage(checked) {
+  const next = new Set(selectedIds.value)
+  selectablePage.value.forEach(item => checked ? next.add(item.accountId) : next.delete(item.accountId))
+  selectedIds.value = next
+}
+
+function batchRemove() {
+
+  const ids = [...selectedIds.value]
+
+  if (ids.length === 0) return
+
+  ElMessageBox.confirm(t('batchDelConfirm', { msg: ids.length }), {
+    confirmButtonText: t('confirm'),
+    cancelButtonText: t('cancel'),
+    type: 'warning'
+  }).then(() => {
+    batchDeleting.value = true
+    accountBatchDelete(ids).then(total => {
+      ElMessage({ message: t('batchDelSuccessMsg', { msg: total }), type: 'success', plain: true })
+
+      // 侧栏那份列表也得刷新，否则删掉的邮箱还留在上面
+      const deleted = new Set(ids)
+      refresh()
+
+      // 当前正在看的邮箱被删了就切回第一个，不然右侧列表会停在一个不存在的邮箱上
+      if (deleted.has(accountStore.currentAccountId)) {
+        accountStore.currentAccountId = userStore.user.account.accountId
+        accountStore.currentAccount = userStore.user.account
+        emailStore.emailScroll?.refreshList()
+        emailStore.sendScroll?.refreshList()
+      }
+
+      resetManageList()
+    }).finally(() => {
+      batchDeleting.value = false
+    })
+  })
+}
+
 function changeAccount(account) {
   accountStore.currentAccountId = account.accountId
   accountStore.currentAccount = account
@@ -516,6 +683,80 @@ path[fill="#ffdda1"] {
 }
 </style>
 <style scoped lang="scss">
+.manage-box {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+  .manage-list {
+    height: 320px;
+    border: 1px solid var(--el-border-color);
+    border-radius: 4px;
+  }
+
+  .manage-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--el-border-color-lighter);
+
+    &:hover {
+      background-color: var(--el-fill-color-light);
+    }
+
+    &.disabled {
+      cursor: default;
+      opacity: .6;
+    }
+  }
+
+  .manage-email {
+    flex: 1;
+    // 邮箱可能很长，撑破弹窗比截断更难受
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+    color: var(--el-text-color-primary);
+  }
+
+  .manage-tag {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+    border: 1px solid var(--el-border-color);
+    border-radius: 3px;
+    padding: 0 5px;
+  }
+
+  .manage-tip {
+    text-align: center;
+    padding: 12px;
+    font-size: 13px;
+    color: var(--el-text-color-secondary);
+  }
+
+  .manage-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .manage-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .manage-count {
+    font-size: 13px;
+    color: var(--el-text-color-secondary);
+  }
+}
+
 .account-box {
 
   border-right: 1px solid var(--el-border-color) !important;

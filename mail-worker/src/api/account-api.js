@@ -13,6 +13,11 @@ app.delete('/account/delete', async (c) => {
 	return c.json(result.ok());
 });
 
+app.delete('/account/batchDelete', async (c) => {
+	const total = await accountService.batchDelete(c, c.req.query(), userContext.getUserId(c));
+	return c.json(result.ok(total));
+});
+
 app.post('/account/add', async (c) => {
 	const account = await accountService.add(c, await c.req.json(), userContext.getUserId(c));
 	return c.json(result.ok(account));
