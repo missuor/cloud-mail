@@ -13,6 +13,7 @@ import dayjs from 'dayjs';
 import { isDel, roleConst } from '../const/entity-const';
 import email from '../entity/email';
 import userService from './user-service';
+import loginLimitService from './login-limit-service';
 import KvConst from '../const/kv-const';
 
 const publicService = {
@@ -175,20 +176,33 @@ const publicService = {
 
 	async verifyUser(c, params) {
 
-		const { email, password } = params
+		const { email, password, token } = params
+
+		// 这个接口免鉴权，校验的还是管理员口令。不套限流的话，绕过登录侧的
+		// 防爆破根本不用费劲，直接打这里就行。
+		// 但它是开放 API、由脚本调用，解不了人机验证，所以只对它保留硬锁那层：
+		// 否则同一出口 IP 下有人网页登录失败几次，管理员的自动化就被卡死且无法自救
+		const limitCount = await loginLimitService.assertAllowed(c, email, token, false);
 
 		const userRow = await userService.selectByEmailIncludeDel(c, email);
 
 		if (email !== c.env.admin) {
+			await loginLimitService.recordFail(c, email);
 			throw new BizError(t('notAdmin'));
 		}
 
 		if (!userRow || userRow.isDel === isDel.DELETE) {
+			await loginLimitService.recordFail(c, email);
 			throw new BizError(t('notExistUser'));
 		}
 
 		if (!await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password)) {
+			await loginLimitService.recordFail(c, email);
 			throw new BizError(t('IncorrectPwd'));
+		}
+
+		if (limitCount && limitCount.accountCount > 0) {
+			await loginLimitService.clear(c, email);
 		}
 	}
 

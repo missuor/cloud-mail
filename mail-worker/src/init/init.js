@@ -29,8 +29,25 @@ const dbInit = {
 		await this.v2_8DB(c);
 		await this.v2_9DB(c);
 		await this.v3_0DB(c);
+		await this.v3_1DB(c);
 		await settingService.refresh(c);
 		return c.text('success');
+	},
+
+	// 登录防爆破需要对 verify_record 做原子自增，靠的是 (ip,type) 唯一索引 +
+	// ON CONFLICT。建索引前必须先去重：老数据在并发下可能已经有同 (ip,type)
+	// 的重复行，直接建唯一索引会失败。
+	async v3_1DB(c) {
+		try {
+			await c.env.db.prepare(
+				`DELETE FROM verify_record WHERE vr_id NOT IN (
+					SELECT MIN(vr_id) FROM verify_record GROUP BY ip, type
+				)`).run();
+			await c.env.db.prepare(
+				`CREATE UNIQUE INDEX IF NOT EXISTS idx_verify_record_ip_type ON verify_record (ip, type)`).run();
+		} catch (e) {
+			console.error(e);
+		}
 	},
 
 	async v3_0DB(c) {

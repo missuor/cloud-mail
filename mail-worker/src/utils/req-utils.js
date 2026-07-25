@@ -6,6 +6,13 @@ const reqUtils = {
 			'Unknown';
 	},
 
+	// 限流专用的来源标识：只认 CF-Connecting-IP。X-Forwarded-For 是客户端可写的，
+	// 拿它当限流身份等于让攻击者每次请求自选一个新桶。取不到时所有请求落到同一个桶，
+	// 宁可误伤也不放行
+	getLimitIp(c) {
+		return c.req.header('CF-Connecting-IP') || 'unknown-ip';
+	},
+
 	getUserAgent(c) {
 		const ua = c.req.header('user-agent') || '';
 

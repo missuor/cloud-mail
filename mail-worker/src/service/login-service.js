@@ -2,7 +2,7 @@ import BizError from '../error/biz-error';
 import userService from './user-service';
 import emailUtils from '../utils/email-utils';
 import { isDel, settingConst, userConst, verifyRecordType } from '../const/entity-const';
-import reqUtils from '../utils/req-utils';
+import loginLimitService from './login-limit-service';
 import JwtUtils from '../utils/jwt-utils';
 import { v4 as uuidv4 } from 'uuid';
 import KvConst from '../const/kv-const';
@@ -200,48 +200,6 @@ const loginService = {
 		return { type: regKeyRow.roleId, regKeyId: regKeyRow.regKeyId };
 	},
 
-	// 登录防爆破。两层：失败到 LOGIN_VERIFY_COUNT 要求人机验证，
-	// 到 LOGIN_LOCK_COUNT 直接拒绝，计数在 LOGIN_FAIL_WINDOW_MINUTE 的滑动窗口内累计。
-	async assertLoginAllowed(c, email, token) {
-
-		const ip = reqUtils.getIp(c);
-
-		const ipCount = await verifyRecordService.loginFailCount(c, ip, verifyRecordType.LOGIN_IP);
-		const accountCount = await verifyRecordService.loginFailCount(c, email, verifyRecordType.LOGIN_ACCOUNT);
-
-		// 硬锁只看 IP。按账号硬锁的话，攻击者故意打满某个账号就能把本人锁在门外，
-		// 等于送了一个拒绝服务的开关
-		if (ipCount >= constant.LOGIN_LOCK_COUNT) {
-			throw new BizError(t('loginTooManyAttempts'), 429);
-		}
-
-		if (ipCount < constant.LOGIN_VERIFY_COUNT && accountCount < constant.LOGIN_VERIFY_COUNT) {
-			return;
-		}
-
-		const { secretKey } = await settingService.query(c);
-
-		// 没配 Turnstile 时这层不可用。此处放行、只留硬锁那层，
-		// 否则会把没配人机验证的站点的用户直接卡死到窗口结束
-		if (!secretKey) {
-			return;
-		}
-
-		await turnstileService.verify(c, token);
-	},
-
-	async recordLoginFail(c, email) {
-		const ip = reqUtils.getIp(c);
-		await verifyRecordService.increaseLoginFail(c, ip, verifyRecordType.LOGIN_IP);
-		await verifyRecordService.increaseLoginFail(c, email, verifyRecordType.LOGIN_ACCOUNT);
-	},
-
-	async clearLoginFail(c, email) {
-		const ip = reqUtils.getIp(c);
-		await verifyRecordService.clearLoginFail(c, ip, verifyRecordType.LOGIN_IP);
-		await verifyRecordService.clearLoginFail(c, email, verifyRecordType.LOGIN_ACCOUNT);
-	},
-
 	async login(c, params, noVerifyPwd = false) {
 
 		const { email, password, token } = params;
@@ -251,15 +209,17 @@ const loginService = {
 		}
 
 		// noVerifyPwd 是 oauth 等免密路径，本来就不校验口令，不该受爆破限制影响
+		let limitCount = null;
+
 		if (!noVerifyPwd) {
-			await this.assertLoginAllowed(c, email, token);
+			limitCount = await loginLimitService.assertAllowed(c, email, token);
 		}
 
 		const userRow = await userService.selectByEmailIncludeDel(c, email);
 
 		if (!userRow) {
 			// 账号不存在也要计数，否则枚举账号这一步是不受限的
-			await this.recordLoginFail(c, email);
+			await loginLimitService.recordFail(c, email);
 			throw new BizError(t('notExistUser'));
 		}
 
@@ -272,12 +232,13 @@ const loginService = {
 		}
 
 		if (!await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password) && !noVerifyPwd) {
-			await this.recordLoginFail(c, email);
+			await loginLimitService.recordFail(c, email);
 			throw new BizError(t('IncorrectPwd'));
 		}
 
-		if (!noVerifyPwd) {
-			await this.clearLoginFail(c, email);
+		// 绝大多数登录计数本来就是 0，此时清理必然是空写，没必要每次都往 D1 打一发
+		if (!noVerifyPwd && limitCount && limitCount.accountCount > 0) {
+			await loginLimitService.clear(c, email);
 		}
 
 		const uuid = uuidv4();

@@ -8,6 +8,7 @@ import constant from '../const/constant';
 import BizError from '../error/biz-error';
 import {t} from '../i18n/i18n'
 import verifyRecordService from './verify-record-service';
+import reqUtils from '../utils/req-utils';
 import userContext from '../security/user-context';
 
 const settingService = {
@@ -115,12 +116,13 @@ const settingService = {
 			if (row.type === verifyRecordType.ADD) {
 				addVerifyOpen = row.count >= settingRow.addVerifyCount
 			}
-			// 登录失败计数带 15 分钟滑动窗口，过期的旧记录不该再让登录页弹人机验证
-			if (row.type === verifyRecordType.LOGIN_IP) {
-				loginVerifyOpen = row.count >= constant.LOGIN_VERIFY_COUNT
-					&& !verifyRecordService.isExpired(row.updateTime)
-			}
 		})
+
+		// 登录限流的 key 是 getLimitIp（只认 CF-Connecting-IP），与上面 recordList
+		// 用的 getIp 可能不是同一个值，所以单独查，不能混在同一批里
+		const loginFailCount = await verifyRecordService.loginFailCount(
+			c, reqUtils.getLimitIp(c), verifyRecordType.LOGIN_IP)
+		loginVerifyOpen = loginFailCount >= constant.LOGIN_VERIFY_COUNT
 
 		settingRow.regVerifyOpen = regVerifyOpen
 		settingRow.addVerifyOpen = addVerifyOpen
