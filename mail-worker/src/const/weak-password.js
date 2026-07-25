@@ -53,7 +53,9 @@ export function isStructurallyWeak(password) {
 		return true;
 	}
 
-	if (/^\d+$/.test(s)) {
+	// 纯数字：短的确实弱（10 位约 33 bit，当前迭代数下约一天可破），
+	// 但 16 位以上有 53 bit 以上，一刀切拒掉是过头了
+	if (/^\d+$/.test(s) && s.length < 16) {
 		return true;
 	}
 

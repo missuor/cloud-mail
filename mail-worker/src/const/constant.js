@@ -19,6 +19,8 @@ const constant = {
 	// 口令最小长度。6 位小写+数字在当前迭代数下单张 4090 约 5.5 小时可破，
 	// 10 位同字符集约 800 年——这个杠杆比在 CPU 预算里抠迭代次数大得多
 	PWD_MIN_LENGTH: 10,
+	// 码点数下限：防止靠掺一个汉字把短口令抬过有效长度线（如「密a1234」）
+	PWD_MIN_CODE_POINTS: 6,
 	// PBKDF2-HMAC-SHA256 的迭代次数。默认值受 Workers 免费版每请求 10ms CPU
 	// 上限约束（实测 5 万次约 5.2ms，10 万次已 10.6ms 会直接超限）。
 	// 付费部署可用 pwd_iterations 变量调高，OWASP 对 PBKDF2-SHA256 建议 60 万
