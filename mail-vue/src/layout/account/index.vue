@@ -2,8 +2,10 @@
   <div class="account-box">
     <div class="head-opt">
       <Icon v-perm="'account:add'" class="icon add" icon="ion:add-outline" width="23" height="23" @click="add"/>
-      <Icon v-perm="'account:delete'" class="icon manage" icon="fluent:list-bar-16-filled" width="19" height="19"
-            :title="$t('manageAccount')" @click="openManage"/>
+      <el-tooltip :content="$t('manageAccount')" placement="bottom">
+        <Icon v-perm="'account:delete'" class="icon manage" icon="fluent:list-bar-16-filled" width="19" height="19"
+              @click="openManage"/>
+      </el-tooltip>
       <Icon class="icon refresh" icon="ion:reload" width="18" height="18" @click="refresh"/>
     </div>
     <el-scrollbar class="scrollbar" ref="scrollbarRef">
@@ -138,7 +140,7 @@
             </div>
 
             <div v-if="manageLoading" class="manage-tip">{{ $t('accountLoading') }}</div>
-            <div v-else-if="manageAccounts.length === 0" class="manage-tip">{{ $t('noMessagesFound') }}</div>
+            <div v-else-if="manageAccounts.length === 0" class="manage-tip">{{ $t('noAccountFound') }}</div>
             <div v-else-if="manageNoMore" class="manage-tip">{{ $t('noMoreData') }}</div>
           </div>
         </el-scrollbar>
@@ -393,6 +395,10 @@ const batchDeleting = ref(false)
 const manageScrollRef = ref(null)
 const selectedIds = ref(new Set())
 let keywordTimer = null
+// 请求序号。只比对关键字不够：关键字兜一圈回到原值时（a -> b -> 退格回 a），
+// 旧请求回来比对相等就会被当成有效结果整页重复追加；分页请求在途时点删除、
+// 列表被清空后那个响应也会塞进新列表冒出幽灵行。序号能同时挡住这两种
+let reqSeq = 0
 
 // 本人主邮箱删不掉（后端也会拒），这里直接禁选
 function isSelf(item) {
@@ -414,7 +420,10 @@ function openManage() {
 }
 
 function onManageClosed() {
-  // 关掉就清干净，免得下次打开还留着上次的勾选
+  // 关掉就清干净，免得下次打开还留着上次的勾选。
+  // 防抖定时器也要撤，否则输入后立刻关闭，300ms 后还会白发一次请求
+  clearTimeout(keywordTimer)
+  reqSeq++
   manageAccounts.splice(0, manageAccounts.length)
   selectedIds.value = new Set()
   manageKeyword.value = ''
@@ -422,6 +431,7 @@ function onManageClosed() {
 }
 
 function resetManageList() {
+  reqSeq++ // 作废所有在途请求
   manageAccounts.splice(0, manageAccounts.length)
   selectedIds.value = new Set()
   manageNoMore.value = false
@@ -444,16 +454,19 @@ function getManageList() {
 
   manageLoading.value = true
 
+  const seq = ++reqSeq
   const accountId = manageAccounts.length > 0 ? manageAccounts.at(-1).accountId : 0
   const lastSort = manageAccounts.length > 0 ? manageAccounts.at(-1).sort : null
   const keyword = manageKeyword.value
 
   accountList(accountId, 30, lastSort, keyword).then(list => {
-    // 请求回来时关键字可能已经变了，丢弃过期结果，否则会把上一次的结果混进来
-    if (keyword !== manageKeyword.value) return
+    // 过期响应直接丢弃。序号只会递增，所以「不是最新那次」的判断是可靠的
+    if (seq !== reqSeq) return
     if (list.length < 30) manageNoMore.value = true
     manageAccounts.push(...list)
   }).finally(() => {
+    // loading 标志归当前那次请求所有，过期响应不能替它清掉
+    if (seq !== reqSeq) return
     manageLoading.value = false
   })
 }
@@ -577,7 +590,18 @@ function getAccountList() {
       noLoading.value = true
     }
     if (accounts.length === 0) {
-      accountStore.currentAccount = list[0]
+      // 原来是无条件顶成 list[0]，而 currentAccountId 不变，于是每次 refresh 后
+      // 两者就不一致了（写信的默认发件人、allReceive 都会取错）。
+      // 批量删除必调 refresh，这条会被撞得更频繁。
+      // 选中项在首屏就用首屏那份刷新它；不在首屏可能是翻到后面去了，不能乱动
+      const current = list.find(item => item.accountId === accountStore.currentAccountId)
+
+      if (current) {
+        accountStore.currentAccount = current
+      } else if (!accountStore.currentAccount) {
+        accountStore.currentAccount = list[0]
+        accountStore.currentAccountId = list[0]?.accountId
+      }
     }
 
     accounts.push(...list)

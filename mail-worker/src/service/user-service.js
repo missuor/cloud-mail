@@ -140,7 +140,8 @@ const userService = {
 		num = Number(num);
 		timeSort = Number(timeSort);
 		params.isDel = Number(params.isDel);
-		if (size > 50) {
+		// 同 account 列表：只判上界不够，SQLite 里 limit(-1) 等于不限
+		if (!Number.isInteger(size) || size < 1 || size > 50) {
 			size = 50;
 		}
 

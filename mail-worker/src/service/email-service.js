@@ -11,6 +11,7 @@ import fileUtils from '../utils/file-utils';
 import { Resend } from 'resend';
 import attService from './att-service';
 import { parseHTML } from 'linkedom';
+import { toLikeKeyword } from '../utils/verify-utils';
 import userService from './user-service';
 import roleService from './role-service';
 import user from '../entity/user';
@@ -810,25 +811,28 @@ const emailService = {
 			conditions.push(eq(email.status, emailConst.status.NOONE));
 		}
 
+		// 与 account / user 列表同一处理：D1 的 LIKE pattern 上限是 50 字节，
+		// 直接把用户输入拼进去会 500，中文尤其容易撞（17 个汉字就超）
 		if (userEmail) {
-			conditions.push(sql`${user.email} COLLATE NOCASE LIKE ${'%'+ userEmail + '%'}`);
+			conditions.push(sql`${user.email} COLLATE NOCASE LIKE ${'%' + toLikeKeyword(userEmail) + '%'} ESCAPE '\\'`);
 		}
 
 		if (accountEmail) {
+			const keyword = toLikeKeyword(accountEmail);
 			conditions.push(
 				or(
-					sql`${email.toEmail} COLLATE NOCASE LIKE ${'%'+ accountEmail + '%'}`,
-					sql`${email.sendEmail} COLLATE NOCASE LIKE ${'%'+ accountEmail + '%'}`,
+					sql`${email.toEmail} COLLATE NOCASE LIKE ${'%' + keyword + '%'} ESCAPE '\\'`,
+					sql`${email.sendEmail} COLLATE NOCASE LIKE ${'%' + keyword + '%'} ESCAPE '\\'`,
 				)
 			)
 		}
 
 		if (name) {
-			conditions.push(sql`${email.name} COLLATE NOCASE LIKE ${'%'+ name + '%'}`);
+			conditions.push(sql`${email.name} COLLATE NOCASE LIKE ${'%' + toLikeKeyword(name) + '%'} ESCAPE '\\'`);
 		}
 
 		if (subject) {
-			conditions.push(sql`${email.subject} COLLATE NOCASE LIKE ${'%'+ subject + '%'}`);
+			conditions.push(sql`${email.subject} COLLATE NOCASE LIKE ${'%' + toLikeKeyword(subject) + '%'} ESCAPE '\\'`);
 		}
 
 		conditions.push(ne(email.status, emailConst.status.SAVING));

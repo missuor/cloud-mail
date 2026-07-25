@@ -214,6 +214,7 @@ const zh = {
     addSuccessMsg: '添加成功',
     delConfirm: '确认删除{msg}吗?',
     manageAccount: '批量管理邮箱',
+    noAccountFound: '没有找到邮箱',
     accountLoading: '加载中...',
     searchAccountPlaceholder: '搜索邮箱地址',
     selectCurrentPage: '全选当页',

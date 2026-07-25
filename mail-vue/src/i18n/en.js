@@ -214,6 +214,7 @@ const en = {
     addSuccessMsg: 'Addition successful',
     delConfirm: 'Confirm deleting {msg}?',
     manageAccount: 'Manage Emails',
+    noAccountFound: 'No emails found',
     accountLoading: 'Loading...',
     searchAccountPlaceholder: 'Search email address',
     selectCurrentPage: 'Select current page',
