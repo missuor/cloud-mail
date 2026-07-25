@@ -141,6 +141,10 @@ export const settingConst = {
 export const verifyRecordType = {
 	REG: 0,
 	ADD: 1,
+	// 登录失败计数。IP 维度挡单机爆破与撞库，账号维度挡分布式打单个账号。
+	// 两者共用 verify_record 的 ip 列存标识（IP 或邮箱），只靠 type 区分。
+	LOGIN_IP: 2,
+	LOGIN_ACCOUNT: 3,
 }
 
 

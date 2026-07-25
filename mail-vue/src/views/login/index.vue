@@ -41,6 +41,14 @@
           </el-input>
           <el-input v-model="form.password" :placeholder="$t('password')" type="password" autocomplete="off">
           </el-input>
+          <div v-show="loginVerifyShow"
+               class="login-turnstile"
+               :data-sitekey="settingStore.settings.siteKey"
+               data-callback="onLoginTurnstileSuccess"
+               data-error-callback="onLoginTurnstileError"
+          >
+            <span style="font-size: 12px;color: #F56C6C" v-if="loginBotJsError">{{ $t('verifyModuleFailed') }}</span>
+          </div>
           <el-button class="btn" type="primary" @click="submit" :loading="loginLoading"
           >{{ $t('loginBtn') }}
           </el-button>
@@ -202,6 +210,52 @@ let verifyToken = ''
 let turnstileId = null
 let botJsError = ref(false)
 let verifyErrorCount = 0
+
+// 登录侧的人机验证独立一套：控件在登录表单里，与注册表单那个不能共用同一个容器
+const loginVerifyShow = ref(settingStore.settings.loginVerifyOpen === true)
+const loginBotJsError = ref(false)
+let loginVerifyToken = ''
+let loginTurnstileId = null
+
+let loginVerifyRetry = 0
+
+function renderLoginTurnstile() {
+  nextTick(() => {
+    // turnstile 的脚本是异步加载的，页面一进来就要显示控件时它可能还没就绪
+    if (!window.turnstile) {
+      if (loginVerifyRetry >= 4) {
+        loginBotJsError.value = true
+        return
+      }
+      loginVerifyRetry++
+      setTimeout(renderLoginTurnstile, 1500)
+      return
+    }
+    try {
+      if (loginTurnstileId === null) {
+        loginTurnstileId = window.turnstile.render('.login-turnstile')
+      } else {
+        window.turnstile.reset(loginTurnstileId)
+      }
+    } catch (e) {
+      loginBotJsError.value = true
+      console.warn('人机验证js加载失败', e)
+    }
+  })
+}
+
+if (loginVerifyShow.value) {
+  renderLoginTurnstile()
+}
+
+window.onLoginTurnstileSuccess = (token) => {
+  loginVerifyToken = token;
+};
+
+window.onLoginTurnstileError = (e) => {
+  loginBotJsError.value = true
+  console.warn('人机验证js加载失败', e)
+};
 
 window.onTurnstileSuccess = (token) => {
   verifyToken = token;
@@ -393,8 +447,20 @@ const submit = () => {
   }
 
   loginLoading.value = true
-  login(email, form.password).then(async data => {
+  login(email, form.password, loginVerifyToken).then(async data => {
+    loginVerifyShow.value = false
     await saveToken(data.token)
+  }).catch(res => {
+    // 400 = 服务端要求人机验证（失败次数达到阈值，或提交的 token 已失效）
+    if (res.code === 400) {
+      loginVerifyShow.value = true
+      renderLoginTurnstile()
+    }
+    // token 是一次性的，任何一次失败后都得重新取，否则下次提交必然再失败
+    loginVerifyToken = ''
+    if (loginVerifyShow.value && res.code !== 400) {
+      renderLoginTurnstile()
+    }
   }).finally(() => {
     loginLoading.value = false
   })
@@ -733,6 +799,10 @@ function submitRegister() {
 }
 
 .register-turnstile {
+  margin-bottom: 18px;
+}
+
+.login-turnstile {
   margin-bottom: 18px;
 }
 

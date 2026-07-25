@@ -4,6 +4,7 @@ import { eq, sql, and } from 'drizzle-orm';
 import dayjs from 'dayjs';
 import reqUtils from '../utils/req-utils';
 import { verifyRecordType } from '../const/entity-const';
+import constant from '../const/constant';
 
 const verifyRecordService = {
 
@@ -49,6 +50,57 @@ const verifyRecordService = {
 
 		return false
 
+	},
+
+	// 下面三个是登录防爆破用的带窗口计数。与注册/加邮箱那套的区别是：
+	// 那套按天累计、靠每日 cron 清表；登录要的是 15 分钟滑动窗口，
+	// 所以读的时候按 update_time 判过期，过期的旧记录当作 0 起算。
+	async loginFailCount(c, key, type) {
+
+		const row = await orm(c).select().from(verifyRecord)
+			.where(and(eq(verifyRecord.ip, key), eq(verifyRecord.type, type))).get();
+
+		if (!row) {
+			return 0;
+		}
+
+		if (this.isExpired(row.updateTime)) {
+			return 0;
+		}
+
+		return row.count;
+	},
+
+	async increaseLoginFail(c, key, type) {
+
+		const now = dayjs().format('YYYY-MM-DD HH:mm:ss');
+
+		const row = await orm(c).select().from(verifyRecord)
+			.where(and(eq(verifyRecord.ip, key), eq(verifyRecord.type, type))).get();
+
+		if (!row) {
+			return orm(c).insert(verifyRecord).values({ ip: key, type, count: 1, updateTime: now }).run();
+		}
+
+		// 窗口已过就从 1 重新起算，否则会把几小时前的失败也算进来
+		const count = this.isExpired(row.updateTime) ? 1 : row.count + 1;
+
+		return orm(c).update(verifyRecord).set({ count, updateTime: now })
+			.where(and(eq(verifyRecord.ip, key), eq(verifyRecord.type, type))).run();
+	},
+
+	async clearLoginFail(c, key, type) {
+		return orm(c).delete(verifyRecord)
+			.where(and(eq(verifyRecord.ip, key), eq(verifyRecord.type, type))).run();
+	},
+
+	isExpired(updateTime) {
+		if (!updateTime) {
+			return true;
+		}
+		// 登录记录的 update_time 一律由本服务用 dayjs().format() 写入，读回来仍用
+		// dayjs() 比较，同一个时钟自洽，不依赖运行时时区，也不碰 utc 插件
+		return dayjs(updateTime).add(constant.LOGIN_FAIL_WINDOW_MINUTE, 'minute').isBefore(dayjs());
 	},
 
 	async increaseRegCount(c) {

@@ -106,6 +106,7 @@ const settingService = {
 
 		let regVerifyOpen = false
 		let addVerifyOpen = false
+		let loginVerifyOpen = false
 
 		recordList.forEach(row => {
 			if (row.type === verifyRecordType.REG) {
@@ -114,10 +115,17 @@ const settingService = {
 			if (row.type === verifyRecordType.ADD) {
 				addVerifyOpen = row.count >= settingRow.addVerifyCount
 			}
+			// 登录失败计数带 15 分钟滑动窗口，过期的旧记录不该再让登录页弹人机验证
+			if (row.type === verifyRecordType.LOGIN_IP) {
+				loginVerifyOpen = row.count >= constant.LOGIN_VERIFY_COUNT
+					&& !verifyRecordService.isExpired(row.updateTime)
+			}
 		})
 
 		settingRow.regVerifyOpen = regVerifyOpen
 		settingRow.addVerifyOpen = addVerifyOpen
+		// 没配 Turnstile 时登录侧不会真的校验，前端也就不必显示控件
+		settingRow.loginVerifyOpen = loginVerifyOpen && !!settingRow.secretKey
 
 		settingRow.storageType = await r2Service.storageType(c);
 
@@ -219,6 +227,7 @@ const settingService = {
 			regKey: settingRow.regKey,
 			regVerifyOpen: settingRow.regVerifyOpen,
 			addVerifyOpen: settingRow.addVerifyOpen,
+			loginVerifyOpen: settingRow.loginVerifyOpen,
 			noticeTitle: settingRow.noticeTitle,
 			noticeContent: settingRow.noticeContent,
 			noticeType: settingRow.noticeType,
