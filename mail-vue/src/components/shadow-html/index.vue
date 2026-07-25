@@ -24,7 +24,8 @@ function updateContent() {
   // 1. 提取 <body> 的 style 属性（如果存在）
   const bodyStyleRegex = /<body[^>]*style="([^"]*)"[^>]*>/i;
   const bodyStyleMatch = props.html.match(bodyStyleRegex);
-  const bodyStyle = bodyStyleMatch ? bodyStyleMatch[1] : '';
+  // 去掉尖括号，防止 body style 里塞 </style> 提前闭合样式块后注入标签
+  const bodyStyle = bodyStyleMatch ? bodyStyleMatch[1].replace(/[<>]/g, '') : '';
 
   // 2. 移除 <body> 标签（保留内容）
   const cleanedHtml = props.html.replace(/<\/?body[^>]*>/gi, '');

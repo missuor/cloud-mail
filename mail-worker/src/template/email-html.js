@@ -50,7 +50,7 @@ export default function emailHtmlTemplate(html, domain) {
             // 提取 <body> 的 style 属性
             const bodyStyleRegex = /<body[^>]*style="([^"]*)"[^>]*>/i;
             const bodyStyleMatch = html.match(bodyStyleRegex);
-            const bodyStyle = bodyStyleMatch ? bodyStyleMatch[1] : '';
+            const bodyStyle = bodyStyleMatch ? bodyStyleMatch[1].replace(/[<>]/g, '') : '';
 
             // 移除 <body> 标签
             const cleanedHtml = html.replace(/<\\/?body[^>]*>/gi, '');
