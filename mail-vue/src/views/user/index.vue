@@ -366,6 +366,7 @@
 
 <script setup>
 import {defineOptions, h, reactive, ref, watch} from 'vue'
+import { PWD_MIN_LENGTH } from '@/utils/pwd-const.js'
 import {
   userList,
   userDelete,
@@ -720,9 +721,9 @@ function submit() {
     return
   }
 
-  if (addForm.password.length < 6) {
+  if (addForm.password.length < PWD_MIN_LENGTH) {
     ElMessage({
-      message: t('pwdLengthMsg'),
+      message: t('pwdLengthMsg', { msg: PWD_MIN_LENGTH }),
       type: "error",
       plain: true
     })
@@ -932,9 +933,9 @@ function updatePwd() {
     return
   }
 
-  if (userForm.password.length < 6) {
+  if (userForm.password.length < PWD_MIN_LENGTH) {
     ElMessage({
-      message: t('pwdLengthMsg'),
+      message: t('pwdLengthMsg', { msg: PWD_MIN_LENGTH }),
       type: 'error',
       plain: true,
     })

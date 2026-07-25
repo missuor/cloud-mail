@@ -1,4 +1,5 @@
 import BizError from '../error/biz-error';
+import pwdPolicy from '../utils/pwd-policy';
 import orm from '../entity/orm';
 import { v4 as uuidv4 } from 'uuid';
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
@@ -115,6 +116,11 @@ const publicService = {
 
 			if (!c.env.domain.includes(emailUtils.getDomain(emailRow.email))) {
 				throw new BizError(t('notEmailDomain'));
+			}
+
+			// 显式提供的口令要过强度策略；自动生成的是随机 12 位，本来就够强
+			if (emailRow.password) {
+				pwdPolicy.assertStrong(emailRow.password);
 			}
 
 			const { salt, hash } = await saltHashUtils.hashPassword(

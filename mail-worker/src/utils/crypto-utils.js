@@ -91,7 +91,8 @@ const saltHashUtils = {
 		return diff === 0;
 	},
 
-	genRandomPwd(length = 8) {
+	// 长度要不低于 PWD_MIN_LENGTH，否则自动生成的初始口令自己就不满足策略
+	genRandomPwd(length = 12) {
 		const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
 		const bytes = new Uint8Array(length);
 		crypto.getRandomValues(bytes);

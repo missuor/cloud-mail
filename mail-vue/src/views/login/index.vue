@@ -156,6 +156,7 @@
 
 <script setup>
 import router from "@/router";
+import { PWD_MIN_LENGTH } from '@/utils/pwd-const.js'
 import {computed, nextTick, reactive, ref} from "vue";
 import {login} from "@/request/login.js";
 import {register} from "@/request/login.js";
@@ -539,9 +540,9 @@ function submitRegister() {
     return
   }
 
-  if (registerForm.password.length < 6) {
+  if (registerForm.password.length < PWD_MIN_LENGTH) {
     ElMessage({
-      message: t('pwdLengthMsg'),
+      message: t('pwdLengthMsg', { msg: PWD_MIN_LENGTH }),
       type: 'error',
       plain: true,
     })

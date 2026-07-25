@@ -1,4 +1,5 @@
 import BizError from '../error/biz-error';
+import pwdPolicy from '../utils/pwd-policy';
 import accountService from './account-service';
 import orm from '../entity/orm';
 import user from '../entity/user';
@@ -58,9 +59,7 @@ const userService = {
 
 		const { password } = params;
 
-		if (password.length < 6) {
-			throw new BizError(t('pwdMinLength'));
-		}
+		pwdPolicy.assertStrong(password);
 		const { salt, hash } = await cryptoUtils.hashPassword(password, cryptoUtils.iterations(c));
 		await this.updatePassword(c, userId, hash, salt);
 	},
@@ -335,9 +334,7 @@ const userService = {
 			throw new BizError(t('notEmailDomain'));
 		}
 
-		if (password.length < 6) {
-			throw new BizError(t('pwdMinLength'));
-		}
+		pwdPolicy.assertStrong(password);
 
 		const accountRow = await accountService.selectByEmailIncludeDel(c, email);
 

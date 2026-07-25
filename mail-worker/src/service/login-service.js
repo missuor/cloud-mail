@@ -1,4 +1,5 @@
 import BizError from '../error/biz-error';
+import pwdPolicy from '../utils/pwd-policy';
 import userService from './user-service';
 import emailUtils from '../utils/email-utils';
 import { isDel, settingConst, userConst, verifyRecordType } from '../const/entity-const';
@@ -58,9 +59,7 @@ const loginService = {
 			throw new BizError(t('pwdLengthLimit'));
 		}
 
-		if (password.length < 6) {
-			throw new BizError(t('pwdMinLength'));
-		}
+		pwdPolicy.assertStrong(password);
 
 		if (!c.env.domain.includes(emailUtils.getDomain(email))) {
 			throw new BizError(t('notEmailDomain'));
