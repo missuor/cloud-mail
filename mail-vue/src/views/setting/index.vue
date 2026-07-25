@@ -62,7 +62,7 @@
 </template>
 <script setup>
 import {reactive, ref, defineOptions} from 'vue'
-import { PWD_MIN_LENGTH } from '@/utils/pwd-const.js'
+import { PWD_MIN_LENGTH, isTooShort } from '@/utils/pwd-const.js'
 import {resetPassword, userDelete} from "@/request/my.js";
 import {useUserStore} from "@/store/user.js";
 import router from "@/router/index.js";
@@ -170,7 +170,7 @@ function submitPwd() {
     return
   }
 
-  if (form.password.length < PWD_MIN_LENGTH) {
+  if (isTooShort(form.password)) {
     ElMessage({
       message: t('pwdLengthMsg', { msg: PWD_MIN_LENGTH }),
       type: 'error',
