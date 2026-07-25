@@ -7,7 +7,7 @@ import saltHashUtils from '../utils/crypto-utils';
 import cryptoUtils from '../utils/crypto-utils';
 import emailUtils from '../utils/email-utils';
 import roleService from './role-service';
-import verifyUtils from '../utils/verify-utils';
+import verifyUtils, { isLikePatternTooLong } from '../utils/verify-utils';
 import { t } from '../i18n/i18n';
 import reqUtils from '../utils/req-utils';
 import dayjs from 'dayjs';
@@ -52,6 +52,15 @@ const publicService = {
 		num = (num - 1) * size;
 
 		let conditions = []
+
+		// 这五个字段是调用方直接给的完整 LIKE pattern，超过 D1 的 50 字节上限会
+		// 抛 SQLITE_ERROR 变成 500，调用方分不清是自己传太长还是服务端挂了。
+		// 不截断也不转义——那会打断「自己控制通配符」这个既有契约，只做检查
+		for (const [field, value] of Object.entries({ toEmail, sendEmail, sendName, subject, content })) {
+			if (value && isLikePatternTooLong(value)) {
+				throw new BizError(t('searchKeywordTooLong', { msg: field }));
+			}
+		}
 
 		if (toEmail) {
 			conditions.push(sql`${email.toEmail} COLLATE NOCASE LIKE ${toEmail}`)

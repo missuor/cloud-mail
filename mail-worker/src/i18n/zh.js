@@ -36,6 +36,7 @@ const zh = {
 	pwdMinLength: '密码至少{{msg}}位',
 	pwdTooCommon: '这个密码太常见,容易被猜到,请换一个',
 	notEmailDomain: '非法邮箱域名',
+	searchKeywordTooLong: '搜索条件 {{msg}} 过长,最多 50 字节',
 	addUserBatchLimit: '单次批量建户最多 {{msg}} 个,请分批调用',
 	emptyRegKey: '注册码不能为空',
 	notExistRegKey: '注册码不存在',

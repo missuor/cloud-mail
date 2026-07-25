@@ -36,6 +36,7 @@ const en = {
 	pwdMinLength: 'Password must be at least {{msg}} characters',
 	pwdTooCommon: 'This password is too common and easily guessed, please choose another',
 	notEmailDomain: 'Invalid email domain',
+	searchKeywordTooLong: 'Search field {{msg}} is too long, at most 50 bytes',
 	addUserBatchLimit: 'At most {{msg}} users per batch, please split the request',
 	emptyRegKey: 'Invite code cannot be empty',
 	notExistRegKey: 'Invite code does not exist',

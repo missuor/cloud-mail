@@ -30,6 +30,15 @@ export function toLikeKeyword(keyword) {
 	return result;
 }
 
+// 判断一个**调用方自己提供的完整 pattern** 是否超出 D1 的 50 字节上限。
+// 与 toLikeKeyword 的区别：那个用于我们自己包 %...% 的场景，要截断并转义；
+// 这里用于开放 API——调用方有意自己控制通配符（toEmail=%@domain.com 是既有
+// 契约），截断或转义都会打断它，所以只做检查、让调用方拿到一句人话而不是 500。
+// 预算是完整的 50 字节，因为这里不额外包 %
+export function isLikePatternTooLong(pattern) {
+	return new TextEncoder().encode(String(pattern ?? '')).length > 50;
+}
+
 const verifyUtils = {
 	isEmail(str) {
 		return  /^[a-zA-Z0-9!#$%&'*+/=?^_`{|}~.-]+@([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/.test(str);

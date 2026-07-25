@@ -74,7 +74,7 @@
           <div>{{ $t('noMoreData') }}</div>
         </div>
         <div class="empty" v-if="noLoading && accounts.length === 0">
-          <el-empty :description="$t('noMessagesFound')"/>
+          <el-empty :description="$t('noAccountFound')"/>
         </div>
       </div>
 
@@ -118,7 +118,8 @@
         <span style="font-size: 12px;color: #F56C6C" v-if="botJsError">{{ $t('verifyModuleFailed') }}</span>
       </div>
     </el-dialog>
-    <el-dialog v-model="manageShow" class="manage-dialog" :title="$t('manageAccount')" @closed="onManageClosed">
+    <el-dialog v-model="manageShow" class="manage-dialog" :title="$t('manageAccount')"
+               @close="onManageClosing" @closed="onManageClosed">
       <div class="manage-box">
         <el-input v-model="manageKeyword" class="manage-search" clearable
                   :placeholder="$t('searchAccountPlaceholder')" @input="onKeywordInput">
@@ -419,11 +420,16 @@ function openManage() {
   resetManageList()
 }
 
-function onManageClosed() {
-  // 关掉就清干净，免得下次打开还留着上次的勾选。
-  // 防抖定时器也要撤，否则输入后立刻关闭，300ms 后还会白发一次请求
+// @close 在关闭动作一开始就触发，@closed 要等过渡结束（约 300ms）。
+// 防抖也是 300ms，撤定时器必须放在 @close 才抢得赢，否则输入后立刻关闭
+// 仍会白发一次请求
+function onManageClosing() {
   clearTimeout(keywordTimer)
-  reqSeq++
+  reqSeq++ // 作废在途请求
+}
+
+function onManageClosed() {
+  // 关掉就清干净，免得下次打开还留着上次的勾选
   manageAccounts.splice(0, manageAccounts.length)
   selectedIds.value = new Set()
   manageKeyword.value = ''
