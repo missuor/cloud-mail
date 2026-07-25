@@ -4,29 +4,36 @@
 export const PWD_MIN_LENGTH = 10
 export const PWD_MIN_CODE_POINTS = 6
 
-// 有效长度：非 ASCII 字符按 2 个算。不这样算的话，8 个汉字的口令（约 94 bit，
-// 远强于 10 位 ASCII）会被前端按 length=8 挡死，而后端其实是接受的
-// 与后端 weak-password.js 的 normalizeForLength 一致：用 NFC 统一 NFC/NFD 写法、
-// 剔除零宽等格式字符。不用 NFKC——兼容性展开会被反向利用来凑长度
-// （㍿ 一个字符展开成「株式会社」四个码点）
-// 剔除格式字符必须在归一化之前，否则函数不幂等：零宽字符原本隔开了基字符与
-// 组合符，剔除后两者相邻、再归一化一次就会被合成，导致「归一化一次」与「两次」
-// 的码点数不同。前端 isTooShort 内部会再调 effectiveLength（又归一化一次），
-// 顺序错了就会和后端给出相反的判定
-export function normalizeForLength(value) {
-  return String(value ?? '').replace(/\p{Cf}/gu, '').normalize('NFC')
+// 剔除零宽等格式字符：不可见、零熵，却会被按 2 计来凑长度
+function stripFormatChars(value) {
+  return String(value ?? '').replace(/\p{Cf}/gu, '')
 }
 
-export function effectiveLength(value) {
+// 非 ASCII 字符按 2 个算。不这样算的话，8 个汉字的口令（约 94 bit，远强于
+// 10 位 ASCII）会被前端按 length=8 挡死，而后端其实是接受的
+function rawEffectiveLength(value) {
   let length = 0
-  for (const ch of normalizeForLength(value)) {
+  for (const ch of value) {
     length += ch.codePointAt(0) > 0x7f ? 2 : 1
   }
   return length
 }
 
+// 两个度量都取归一化前后的较小值，与后端 pwdPolicy.measure 一致。
+// 归一化的目的是防规避（全角、零宽都让长度变小），取 min 只保留这个方向；
+// 展开是唯一让长度变大的方向，必须挡掉——否则任何让码点变多的归一化路径
+// 都能被用来凑长度（NFKC 的 ㍿ -> 株式会社，NFC 对组合排除表字符同样会展开）
+export function measure(value) {
+  const raw = stripFormatChars(value)
+  const nfc = raw.normalize('NFC')
+  return {
+    effectiveLength: Math.min(rawEffectiveLength(raw), rawEffectiveLength(nfc)),
+    codePoints: Math.min([...raw].length, [...nfc].length),
+  }
+}
+
 // 与后端 pwdPolicy.assertStrong 的长度判断等价
 export function isTooShort(value) {
-  const str = normalizeForLength(value)
-  return effectiveLength(str) < PWD_MIN_LENGTH || [...str].length < PWD_MIN_CODE_POINTS
+  const { effectiveLength, codePoints } = measure(value)
+  return effectiveLength < PWD_MIN_LENGTH || codePoints < PWD_MIN_CODE_POINTS
 }

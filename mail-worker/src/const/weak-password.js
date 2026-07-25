@@ -78,8 +78,14 @@ function isCjkWeak(password) {
 	// 「中文词 + 强 ASCII」的口令会只剩下裸词「管理员」而被误判为弱——
 	// 而那恰恰是中文用户最自然的取密码方式。英文侧没有这个问题，因为
 	// toStem 保留全部字母（adminofmyowndestiny 不会误命中 admin）。
-	// 所以只在口令基本全是汉字（可含数字与少量符号）时才查中文表
-	if ((normalize(password).match(/[a-z]/g) || []).length >= 3) {
+	//
+	// 判据不能只看字母的绝对个数：那样「密码密码密码abc」后缀三个字母就能绕过。
+	// 还要求字母数不少于汉字数——ASCII 真正承载熵时它总是占多数
+	// （管理员Xk7#mQ2$vL 是 6 个字母对 3 个汉字），而拿几个字母给中文弱口令
+	// 当尾巴时汉字才是主体（密码密码密码abc 是 3 对 6）
+	const latinCount = (normalize(password).match(/[a-z]/g) || []).length;
+
+	if (latinCount >= 3 && latinCount >= stem.length) {
 		return false;
 	}
 
@@ -115,7 +121,7 @@ const LEET = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 
 // （e + 零宽空格 + U+0301 一次得到 e+U+0301，二次才合成 é），
 // 于是「归一化一次」和「归一化两次」的码点数不同，前后端只要调用次数不一致
 // 就会给出相反的判定。
-function stripFormatChars(password) {
+export function stripFormatChars(password) {
 	return String(password ?? '').replace(/\p{Cf}/gu, '');
 }
 
