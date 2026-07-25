@@ -1,13 +1,33 @@
-// D1 的 LIKE pattern 长度上限是 50，超过直接抛 SQLITE_ERROR。pattern 由
-// 关键字加首尾两个 % 组成，而 % 和 _ 转义后最坏会翻倍，所以原始关键字截到
-// 20 字符：最坏 20*2 + 2 = 42，稳在上限内。
-// 截断只会让匹配范围变大（前缀仍然命中），比粘一个长邮箱地址进来就 500 好得多。
+// D1/SQLite 的 LIKE pattern 上限是 50 个**字节**（SQLITE_LIMIT_LIKE_PATTERN_LENGTH
+// 走 sqlite3_value_bytes 度量），不是 50 个字符——按字符截会漏：一个汉字 3 字节，
+// 17 个汉字就是 51 字节，照样 500。而这是个中文项目，搜索框里粘一句短话就会撞上。
+//
+// 所以按最终 pattern 的字节数收口，预算 50 减去首尾两个 %。
+// 顺带把 ASCII 的可用长度从 20 提到 48，减少「截断导致命中范围变大」的情况。
 export function toLikeKeyword(keyword) {
-	return String(keyword ?? '')
-		.slice(0, 20)
-		// % 和 _ 是 LIKE 的通配符。不转义的话 john_doe@ 里的下划线会被当成
+
+	const encoder = new TextEncoder();
+	let result = '';
+	let bytes = 2; // 首尾两个 %
+
+	// for...of 按码点迭代，代理对（emoji、扩展区汉字）不会被从中间切开；
+	// 转义符与被转义字符作为一个整体追加，也就不会在末尾切出落单的反斜杠
+	for (const ch of String(keyword ?? '')) {
+
+		// % 和 _ 是 LIKE 的通配符，不转义的话 john_doe@ 里的下划线会被当成
 		// 任意单字符，输入一个 % 更是直接匹配全部
-		.replace(/[\\%_]/g, ch => '\\' + ch);
+		const piece = (ch === '\\' || ch === '%' || ch === '_') ? '\\' + ch : ch;
+		const size = encoder.encode(piece).length;
+
+		if (bytes + size > 50) {
+			break;
+		}
+
+		result += piece;
+		bytes += size;
+	}
+
+	return result;
 }
 
 const verifyUtils = {
