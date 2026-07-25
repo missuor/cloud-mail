@@ -186,8 +186,9 @@ const publicService = {
 
 		const userRow = await userService.selectByEmailIncludeDel(c, email);
 
+		// 这条分支不校验口令，本来就不是一次爆破尝试。给它计数只会白送一个
+		// "不解人机验证就能把任意账号的计数灌满"的投毒入口——这个接口只服务 admin
 		if (email !== c.env.admin) {
-			await loginLimitService.recordFail(c, email);
 			throw new BizError(t('notAdmin'));
 		}
 

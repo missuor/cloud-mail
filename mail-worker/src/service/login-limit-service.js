@@ -30,12 +30,13 @@ const loginLimitService = {
 			verifyRecordService.loginFailCount(c, account, verifyRecordType.LOGIN_ACCOUNT)
 		]);
 
-		// IP 维度硬锁：挡单机高频爆破
-		if (ipCount >= constant.LOGIN_LOCK_COUNT) {
+		// IP 维度硬锁：挡单机高频爆破。阈值比账号维度高，因为共享出口 IP 后面
+		// 可能有几十上百个真实用户，定低了会被正常失败量自己撞到
+		if (ipCount >= constant.LOGIN_LOCK_COUNT_IP) {
 			throw new BizError(t('loginTooManyAttempts'), 429);
 		}
 
-		if (ipCount < constant.LOGIN_VERIFY_COUNT && accountCount < constant.LOGIN_VERIFY_COUNT) {
+		if (ipCount < constant.LOGIN_VERIFY_COUNT_IP && accountCount < constant.LOGIN_VERIFY_COUNT_ACCOUNT) {
 			return { ipCount, accountCount };
 		}
 
@@ -47,7 +48,7 @@ const loginLimitService = {
 			// 否则攻击者换个 IP（一个 IPv6 /64 就是海量合法来源）即可无限猜同一个账号。
 			// 代价是攻击者能把某个账号锁 15 分钟——两害相权，无限猜口令更糟，
 			// 且锁定是有时限、自愈的
-			if (accountCount >= constant.LOGIN_LOCK_COUNT) {
+			if (accountCount >= constant.LOGIN_LOCK_COUNT_ACCOUNT) {
 				throw new BizError(t('loginTooManyAttempts'), 429);
 			}
 			return { ipCount, accountCount };

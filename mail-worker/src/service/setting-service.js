@@ -122,7 +122,7 @@ const settingService = {
 		// 用的 getIp 可能不是同一个值，所以单独查，不能混在同一批里
 		const loginFailCount = await verifyRecordService.loginFailCount(
 			c, reqUtils.getLimitIp(c), verifyRecordType.LOGIN_IP)
-		loginVerifyOpen = loginFailCount >= constant.LOGIN_VERIFY_COUNT
+		loginVerifyOpen = loginFailCount >= constant.LOGIN_VERIFY_COUNT_IP
 
 		settingRow.regVerifyOpen = regVerifyOpen
 		settingRow.addVerifyOpen = addVerifyOpen
