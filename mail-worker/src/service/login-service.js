@@ -127,7 +127,7 @@ const loginService = {
 			}
 		}
 
-		const { salt, hash } = await saltHashUtils.hashPassword(password);
+		const { salt, hash } = await saltHashUtils.hashPassword(password, saltHashUtils.iterations(c));
 
 		const userId = await userService.insert(c, { email, regKeyId,password: hash, salt, type: type || defType });
 
@@ -239,6 +239,22 @@ const loginService = {
 		// 绝大多数登录计数本来就是 0，此时清理必然是空写，没必要每次都往 D1 打一发
 		if (!noVerifyPwd && limitCount && limitCount.accountCount > 0) {
 			await loginLimitService.clear(c, email);
+		}
+
+		// 渐进升级口令哈希。存量口令是单轮 SHA-256，拖库即等于明文；没有明文就无法
+		// 离线重算，只能在用户登录、明文恰好在手的这一刻换掉。调高迭代次数后同理。
+		// 失败不能影响登录本身——升级不了顶多是这次没换成，下次登录再试
+		if (!noVerifyPwd) {
+			const iterations = cryptoUtils.iterations(c);
+
+			if (cryptoUtils.needsRehash(userRow.password, iterations)) {
+				try {
+					const upgraded = await cryptoUtils.hashPassword(password, iterations);
+					await userService.updatePassword(c, userRow.userId, upgraded.hash, upgraded.salt);
+				} catch (e) {
+					console.error('口令哈希升级失败', e);
+				}
+			}
 		}
 
 		const uuid = uuidv4();

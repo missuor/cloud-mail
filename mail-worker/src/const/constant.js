@@ -11,6 +11,10 @@ const constant = {
 	// - IP 维度是粗粒度的共享标识，公司 NAT / 校园网 / CGNAT 后面几十上百人共用一个
 	//   出口，15 分钟内自然产生几十次失败（记错密码、客户端拿过期 token 反复重试）
 	//   毫不稀奇，阈值定低了不用攻击者就能自己把自己锁掉。
+	// PBKDF2-HMAC-SHA256 的迭代次数。默认值受 Workers 免费版每请求 10ms CPU
+	// 上限约束（实测 5 万次约 5.2ms，10 万次已 10.6ms 会直接超限）。
+	// 付费部署可用 pwd_iterations 变量调高，OWASP 对 PBKDF2-SHA256 建议 60 万
+	PWD_ITERATIONS: 50000,
 	LOGIN_FAIL_WINDOW_MINUTE: 15,
 	LOGIN_VERIFY_COUNT_IP: 20,
 	LOGIN_VERIFY_COUNT_ACCOUNT: 5,

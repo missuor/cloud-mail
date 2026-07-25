@@ -1,4 +1,11 @@
+import constant from '../const/constant';
+
 const encoder = new TextEncoder();
+
+// 口令哈希格式：pbkdf2$<迭代次数>$<base64>
+// 迭代次数写进哈希本身，这样调整配置后老记录仍能被正确校验，
+// 并在下次登录时按新配置重算，不需要停机迁移
+const PBKDF2_PREFIX = 'pbkdf2$';
 
 const saltHashUtils = {
 
@@ -8,23 +15,67 @@ const saltHashUtils = {
 		return btoa(String.fromCharCode(...array));
 	},
 
+	// Workers 免费版每请求 CPU 上限是 10ms，而 PBKDF2 是纯 CPU 开销。
+	// 实测（workerd）：5 万次约 5.2ms、10 万次约 10.6ms、31 万次约 32.8ms。
+	// 所以默认值取在免费版能跑的区间，付费部署可以用 pwd_iterations 调高
+	iterations(c) {
+		const configured = Number(c?.env?.pwd_iterations);
 
-	async hashPassword(password) {
+		if (!Number.isFinite(configured) || configured < 1000) {
+			return constant.PWD_ITERATIONS;
+		}
+
+		return Math.floor(configured);
+	},
+
+	async hashPassword(password, iterations = constant.PWD_ITERATIONS) {
 		const salt = this.generateSalt();
-		const hash = await this.genHashPassword(password, salt);
+		const hash = await this.derive(password, salt, iterations);
 		return { salt, hash };
 	},
 
-	async genHashPassword(password, salt) {
-		const data = encoder.encode(salt + password);
-		const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-		const hashArray = Array.from(new Uint8Array(hashBuffer));
-		return btoa(String.fromCharCode(...hashArray));
+	async derive(password, salt, iterations) {
+		const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
+		const bits = await crypto.subtle.deriveBits(
+			{ name: 'PBKDF2', salt: encoder.encode(salt), iterations, hash: 'SHA-256' }, key, 256);
+		const b64 = btoa(String.fromCharCode(...new Uint8Array(bits)));
+		return PBKDF2_PREFIX + iterations + '$' + b64;
+	},
+
+	// 旧格式：单轮 SHA-256(salt + password)。只用于校验存量口令，不再产出
+	async legacyHash(password, salt) {
+		const hashBuffer = await crypto.subtle.digest('SHA-256', encoder.encode(salt + password));
+		return btoa(String.fromCharCode(...new Uint8Array(hashBuffer)));
 	},
 
 	async verifyPassword(inputPassword, salt, storedHash) {
-		const hash = await this.genHashPassword(inputPassword, salt);
-		return this.timingSafeEqual(hash, storedHash);
+
+		if (typeof storedHash !== 'string') {
+			return false;
+		}
+
+		if (!storedHash.startsWith(PBKDF2_PREFIX)) {
+			return this.timingSafeEqual(await this.legacyHash(inputPassword, salt), storedHash);
+		}
+
+		const iterations = Number(storedHash.slice(PBKDF2_PREFIX.length).split('$')[0]);
+
+		if (!Number.isFinite(iterations) || iterations < 1) {
+			return false;
+		}
+
+		return this.timingSafeEqual(await this.derive(inputPassword, salt, iterations), storedHash);
+	},
+
+	// 存量口令是单轮 SHA-256，拖库即等于明文，必须换掉。但没有明文就无法离线重算，
+	// 只能在用户下次登录、拿到明文的那一刻重算一次。配置调高迭代次数后同理
+	needsRehash(storedHash, iterations) {
+
+		if (typeof storedHash !== 'string' || !storedHash.startsWith(PBKDF2_PREFIX)) {
+			return true;
+		}
+
+		return Number(storedHash.slice(PBKDF2_PREFIX.length).split('$')[0]) !== iterations;
 	},
 
 	timingSafeEqual(a, b) {

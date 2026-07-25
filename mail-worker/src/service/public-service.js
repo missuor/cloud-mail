@@ -110,7 +110,7 @@ const publicService = {
 			}
 
 			const { salt, hash } = await saltHashUtils.hashPassword(
-				emailRow.password || cryptoUtils.genRandomPwd()
+				emailRow.password || cryptoUtils.genRandomPwd(), saltHashUtils.iterations(c)
 			);
 
 			emailRow.salt = salt;

@@ -37,6 +37,7 @@ crons = ["0 16 * * *"]
 
 [vars]
 ai_model = "${AI_MODEL}"
+pwd_iterations = "${PWD_ITERATIONS}"
 analysis_cache = "${ANALYSIS_CACHE}"
 #orm_log = false
 domain = "${DOMAIN}"

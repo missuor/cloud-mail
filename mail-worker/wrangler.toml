@@ -37,6 +37,7 @@ crons = ["0 16 * * *"]	#每天晚上12点执行每日任务,刷新分析缓存
 
 [vars]
 #ai_model = ""			#ai模型,不填默认使用@cf/meta/llama-3.1-8b-instruct
+#pwd_iterations = 50000			#口令哈希PBKDF2迭代次数,不填默认50000。免费版每请求10ms CPU上限,调高会超限;付费版可提到31万以上
 #analysis_cache = false			#是否开启分析数据缓存
 #orm_log = false			#是否sql日志
 #domain = []				#邮件域名可可配置多个 示例: ["example1.com","example2.com"]
