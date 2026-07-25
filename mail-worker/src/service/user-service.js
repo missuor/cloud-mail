@@ -13,6 +13,7 @@ import dayjs from 'dayjs';
 import permService from './perm-service';
 import roleService from './role-service';
 import emailUtils from '../utils/email-utils';
+import { toLikeKeyword } from '../utils/verify-utils';
 import saltHashUtils from '../utils/crypto-utils';
 import constant from '../const/constant';
 import { t } from '../i18n/i18n'
@@ -154,7 +155,9 @@ const userService = {
 
 
 		if (email) {
-			conditions.push(sql`${user.email} COLLATE NOCASE LIKE ${'%'+ email + '%'}`);
+			// 同 account 列表：D1 的 LIKE pattern 上限 50，长邮箱地址直接拼进去会 500
+			const keyword = toLikeKeyword(email);
+			conditions.push(sql`${user.email} COLLATE NOCASE LIKE ${'%' + keyword + '%'} ESCAPE '\\'`);
 		}
 
 

@@ -1,5 +1,5 @@
 import BizError from '../error/biz-error';
-import verifyUtils from '../utils/verify-utils';
+import verifyUtils, { toLikeKeyword } from '../utils/verify-utils';
 import emailUtils from '../utils/email-utils';
 import userService from './user-service';
 import emailService from './email-service';
@@ -112,7 +112,9 @@ const accountService = {
 		size = Number(size);
 		lastSort = Number(lastSort);
 
-		if (size > 30) {
+		// 只判上界不够：SQLite 里 limit(-1) 等于不限，size=-1 或 size=abc
+		// （NaN）都会把整张表拉出来
+		if (!Number.isInteger(size) || size < 1 || size > 30) {
 			size = 30;
 		}
 
@@ -137,9 +139,12 @@ const accountService = {
 		];
 
 		// 关键字搜索。邮箱多的时候要靠它把目标筛出来再批量处理，
-		// 与库里其它按邮箱查的地方一致用 COLLATE NOCASE
+		// 与库里其它按邮箱查的地方一致用 COLLATE NOCASE。
+		// 关键字要过 toLikeKeyword：D1 的 LIKE pattern 上限 50，直接把用户粘进来的
+		// 长邮箱地址拼进去会 500
 		if (email) {
-			conditions.push(sql`${account.email} COLLATE NOCASE LIKE ${'%' + email + '%'}`);
+			const keyword = toLikeKeyword(email);
+			conditions.push(sql`${account.email} COLLATE NOCASE LIKE ${'%' + keyword + '%'} ESCAPE '\\'`);
 		}
 
 		return orm(c).select().from(account).where(and(...conditions))
@@ -155,7 +160,10 @@ const accountService = {
 		const user = await userService.selectById(c, userId);
 		const accountRow = await this.selectById(c, accountId);
 
-		if (accountRow.email === user.email) {
+		// 归一化比对。今天靠 account.email 上的 NOCASE 唯一索引兜底、大小写变体
+		// 造不出来，但这是隐性依赖——哪天加了改邮箱功能，精确串比对会静默失效，
+		// 而后果是主邮箱被删且再也加不回来（add 会报「该邮箱已被注销」）
+		if (accountRow.email.toLowerCase() === user.email.toLowerCase()) {
 			throw new BizError(t('delMyAccount'));
 		}
 
@@ -204,7 +212,8 @@ const accountService = {
 			throw new BizError(t('noUserAccount'));
 		}
 
-		if (rows.some(row => row.email === user.email)) {
+		// 同上，归一化比对而不是精确串比对
+		if (rows.some(row => row.email.toLowerCase() === user.email.toLowerCase())) {
 			throw new BizError(t('delMyAccount'));
 		}
 
@@ -282,7 +291,9 @@ const accountService = {
 		num = Number(num)
 		size = Number(size)
 
-		if (size > 30) {
+		// 只判上界不够：SQLite 里 limit(-1) 等于不限，size=-1 或 size=abc
+		// （NaN）都会把整张表拉出来
+		if (!Number.isInteger(size) || size < 1 || size > 30) {
 			size = 30;
 		}
 
