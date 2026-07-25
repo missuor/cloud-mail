@@ -1,4 +1,16 @@
+// text 是收信邮件的 text/plain 正文，完全由发件人控制。这个页面由 Worker
+// 吐在自己的域名下，与 SPA 同源，不转义就是零点击的存储型 XSS。
+function escapeHtml(text) {
+	return String(text)
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
+}
+
 export default function emailTextTemplate(text) {
+	text = escapeHtml(text);
 	return `<!DOCTYPE html>
 <html lang='en' >
 <head>

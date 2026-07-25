@@ -552,20 +552,34 @@ const accountShow = computed(() => {
   return uiStore.accountShow && settingStore.settings.manyEmail === 0
 })
 
+function extractText(html) {
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = DOMPurify.sanitize(html, {
+    FORBID_TAGS: ['img', 'iframe', 'object', 'embed', 'video', 'audio', 'source', 'link', 'svg'],
+  });
+  tempDiv.querySelectorAll('script, style, title').forEach(el => el.remove());
+  const text = tempDiv.textContent || tempDiv.innerText || '';
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 function htmlToText(email) {
   if (email.content) {
 
-    const tempDiv = document.createElement('div');
+    // 先消毒再入 DOM：正则剥标签容易被畸形属性绕过，这里只取纯文本，直接交给 DOMPurify。
+    // 消毒比正则慢一个量级，而列表摘要只用得到开头，所以先截断再消毒——不截断的话
+    // 一页里混着大邮件会阻塞主线程（实测 50 封 260KB 要 2.7s）。
+    // 截断前先剥掉 style/script：营销邮件开头动辄几十 KB 的 CSS，直接截会把正文全切掉。
+    const forText = email.content
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[\s\S]*?<\/script>/gi, '');
 
-    // 先消毒再入 DOM：正则剥标签容易被畸形属性绕过，这里只取纯文本，直接交给 DOMPurify
-    tempDiv.innerHTML = DOMPurify.sanitize(email.content, {
-      FORBID_TAGS: ['img', 'iframe', 'object', 'embed', 'video', 'audio', 'source', 'link', 'svg'],
-    });
+    let text = extractText(forText.slice(0, 20000));
 
-    const scriptsAndStyles = tempDiv.querySelectorAll('script, style, title');
-    scriptsAndStyles.forEach(el => el.remove());
-    let text = tempDiv.textContent || tempDiv.innerText || '';
-    text = text.replace(/\s+/g, ' ').trim();
+    // 兜底：截断后没抽出任何文字（未闭合标签等畸形结构），退回整封重来
+    if (!text && forText.length > 20000) {
+      text = extractText(forText);
+    }
+
     return cleanSpace(text)
   }
 

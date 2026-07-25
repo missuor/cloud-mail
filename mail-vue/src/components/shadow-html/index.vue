@@ -25,15 +25,17 @@ function updateContent() {
   // 1. 提取 <body> 的 style 属性（如果存在）
   const bodyStyleRegex = /<body[^>]*style="([^"]*)"[^>]*>/i;
   const bodyStyleMatch = props.html.match(bodyStyleRegex);
-  // 去掉尖括号，防止 body style 里塞 </style> 提前闭合样式块后注入标签
-  const bodyStyle = bodyStyleMatch ? bodyStyleMatch[1].replace(/[<>]/g, '') : '';
+  const bodyStyle = bodyStyleMatch ? bodyStyleMatch[1] : '';
 
   // 2. 移除 <body> 标签（保留内容）
   const strippedHtml = props.html.replace(/<\/?body[^>]*>/gi, '');
 
   // 2.1 消毒：邮件正文是完全不可信的外部输入，Shadow DOM 只隔离样式不隔离脚本，
   //     不清洗的话一个 <img onerror> 就能在本站源上读走 localStorage 里的 token
+  //     WHOLE_DOCUMENT 必须开：默认值只返回 body 内容，会把 <head> 连同邮件
+  //     自带的 <style> 一起丢掉，营销邮件的排版会整个崩掉
   const cleanedHtml = DOMPurify.sanitize(strippedHtml, {
+    WHOLE_DOCUMENT: true,
     ADD_ATTR: ['target'],
     FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form'],
   });
@@ -72,7 +74,6 @@ function updateContent() {
         width: fit-content;
         height: fit-content;
         min-width: 100%;
-        ${bodyStyle ? bodyStyle : ''} /* 注入 body 的 style */
       }
 
       img:not(table img) {
@@ -85,6 +86,13 @@ function updateContent() {
       ${cleanedHtml}
     </div>
   `;
+
+  // body 的内联样式走 cssText 交给 CSS 解析器：拼进 <style> 块的话，值里的 }
+  // 能闭合规则块逃出去注入任意规则（含作用于宿主元素的 :host），做成全视口遮罩
+  const holder = shadowRoot.querySelector('.shadow-content');
+  if (holder) {
+    holder.style.cssText = bodyStyle;
+  }
 }
 
 function autoScale() {
