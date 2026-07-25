@@ -74,6 +74,15 @@ function isCjkWeak(password) {
 		return false;
 	}
 
+	// 前置闸：toCjkStem 会把非汉字全部剥掉，于是「管理员Xk7#mQ2$vL」这种
+	// 「中文词 + 强 ASCII」的口令会只剩下裸词「管理员」而被误判为弱——
+	// 而那恰恰是中文用户最自然的取密码方式。英文侧没有这个问题，因为
+	// toStem 保留全部字母（adminofmyowndestiny 不会误命中 admin）。
+	// 所以只在口令基本全是汉字（可含数字与少量符号）时才查中文表
+	if ((normalize(password).match(/[a-z]/g) || []).length >= 3) {
+		return false;
+	}
+
 	if (CJK_WEAK_STEMS.has(stem) || CJK_WEAK_STEMS.has(collapseRepeat(stem))) {
 		return true;
 	}
@@ -101,12 +110,21 @@ const LEET = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 
 //   这一侧展开反而是想要的。
 //
 // 两者都要剔除 \p{Cf} 格式字符：零宽空格不可见、零熵，却会被按 2 计来凑长度。
+// 剔除格式字符必须在归一化**之前**：反过来的话函数不幂等——零宽字符原本
+// 隔开了基字符与组合符，剔除后两者相邻，再归一化一次就会被合成
+// （e + 零宽空格 + U+0301 一次得到 e+U+0301，二次才合成 é），
+// 于是「归一化一次」和「归一化两次」的码点数不同，前后端只要调用次数不一致
+// 就会给出相反的判定。
+function stripFormatChars(password) {
+	return String(password ?? '').replace(/\p{Cf}/gu, '');
+}
+
 export function normalizeForLength(password) {
-	return String(password ?? '').normalize('NFC').replace(/\p{Cf}/gu, '');
+	return stripFormatChars(password).normalize('NFC');
 }
 
 export function normalizeForPolicy(password) {
-	return String(password ?? '').normalize('NFKC').replace(/\p{Cf}/gu, '');
+	return stripFormatChars(password).normalize('NFKC');
 }
 
 function normalize(password) {

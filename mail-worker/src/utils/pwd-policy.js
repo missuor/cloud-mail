@@ -17,7 +17,9 @@ const pwdPolicy = {
 	effectiveLength(value) {
 		let length = 0;
 
-		for (const ch of value) {
+		// 内部自己归一化，与前端镜像的契约保持一致：否则谁要是直接拿原始串
+		// 调这个方法，两端会给出不同答案。normalizeForLength 幂等，重复调用无副作用
+		for (const ch of normalizeForLength(value)) {
 			length += ch.codePointAt(0) > 0x7f ? 2 : 1;
 		}
 
