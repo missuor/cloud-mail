@@ -91,11 +91,20 @@ const KEYBOARD_ROWS = [
 // leet 还原：p@ssw0rd -> password
 const LEET = { '0': 'o', '1': 'i', '3': 'e', '4': 'a', '5': 's', '7': 't', '@': 'a', '$': 's', '!': 'i' };
 
-// 长度与词干两侧必须共用同一份归一化输入，否则会出现「词干那边认得、
-// 长度那边算错」的不一致。
-// - NFKC：全角 ｐａｓｓｗｏｒｄ 折成半角，且统一 NFC/NFD（café 的两种写法
-//   码点数不同，不统一的话同一个口令时而过时而不过）
-// - 去掉 \p{Cf} 格式字符：零宽空格不可见、零熵，却会被按 2 计来凑长度
+// 两侧的归一化目标不同，必须分开：
+//
+// - 测长用 NFC。它统一 NFC/NFD（café 的两种写法码点数不同，不统一的话同一个
+//   口令时而过时而不过），但**不做兼容性展开**。用 NFKC 测长会被反向利用：
+//   ㍿ 一个字符展开成「株式会社」四个码点，㍿㍿㍿ 三个字符就能算出 24 的有效
+//   长度直接过线，而真实熵只有 3 个字符。
+// - 词干用 NFKC。全角 ｐａｓｓｗｏｒｄ 必须折成半角，否则换个输入法状态就绕过了；
+//   这一侧展开反而是想要的。
+//
+// 两者都要剔除 \p{Cf} 格式字符：零宽空格不可见、零熵，却会被按 2 计来凑长度。
+export function normalizeForLength(password) {
+	return String(password ?? '').normalize('NFC').replace(/\p{Cf}/gu, '');
+}
+
 export function normalizeForPolicy(password) {
 	return String(password ?? '').normalize('NFKC').replace(/\p{Cf}/gu, '');
 }

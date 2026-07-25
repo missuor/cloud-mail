@@ -1,6 +1,6 @@
 import BizError from '../error/biz-error';
 import constant from '../const/constant';
-import { isWeakPassword, normalizeForPolicy } from '../const/weak-password';
+import { isWeakPassword, normalizeForLength } from '../const/weak-password';
 import { t } from '../i18n/i18n.js';
 
 // 口令强度校验。凡是设置/修改口令的入口都要过这里：注册、自助改密、
@@ -26,10 +26,9 @@ const pwdPolicy = {
 
 	assertStrong(password) {
 
-		// 必须用与弱口令判断同一份归一化输入来测长，否则会出现两侧不一致：
-		// 零宽字符不可见却被按 2 计来凑长度、全角字符按 2 计、同一个口令的
-		// NFC 与 NFD 写法码点数不同导致时而过时而不过
-		const value = normalizeForPolicy(password);
+		// 测长用 NFC 而非 NFKC：既统一 NFC/NFD 写法、剔除零宽字符，又不会被
+		// 兼容性展开反向利用（㍿ 展开成「株式会社」，三个字符就能凑出 24 的长度）
+		const value = normalizeForLength(password);
 		const codePoints = [...value].length;
 
 		if (this.effectiveLength(value) < constant.PWD_MIN_LENGTH

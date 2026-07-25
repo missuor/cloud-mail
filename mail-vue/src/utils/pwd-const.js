@@ -6,15 +6,16 @@ export const PWD_MIN_CODE_POINTS = 6
 
 // 有效长度：非 ASCII 字符按 2 个算。不这样算的话，8 个汉字的口令（约 94 bit，
 // 远强于 10 位 ASCII）会被前端按 length=8 挡死，而后端其实是接受的
-// 与后端 weak-password.js 的 normalizeForPolicy 一致：NFKC 折全角并统一
-// NFC/NFD，剔除零宽等格式字符（不可见、零熵，却会被按 2 计来凑长度）
-export function normalizeForPolicy(value) {
-  return String(value ?? '').normalize('NFKC').replace(/\p{Cf}/gu, '')
+// 与后端 weak-password.js 的 normalizeForLength 一致：用 NFC 统一 NFC/NFD 写法、
+// 剔除零宽等格式字符。不用 NFKC——兼容性展开会被反向利用来凑长度
+// （㍿ 一个字符展开成「株式会社」四个码点）
+export function normalizeForLength(value) {
+  return String(value ?? '').normalize('NFC').replace(/\p{Cf}/gu, '')
 }
 
 export function effectiveLength(value) {
   let length = 0
-  for (const ch of normalizeForPolicy(value)) {
+  for (const ch of normalizeForLength(value)) {
     length += ch.codePointAt(0) > 0x7f ? 2 : 1
   }
   return length
@@ -22,6 +23,6 @@ export function effectiveLength(value) {
 
 // 与后端 pwdPolicy.assertStrong 的长度判断等价
 export function isTooShort(value) {
-  const str = normalizeForPolicy(value)
+  const str = normalizeForLength(value)
   return effectiveLength(str) < PWD_MIN_LENGTH || [...str].length < PWD_MIN_CODE_POINTS
 }
